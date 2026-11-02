@@ -1,7 +1,7 @@
 Package: arwad
 Type: Package
 Title: Compile Loop-Heavy R Functions to Native Code Through 'Goose'
-Version: 0.1.0.9005
+Version: 0.1.0.9006
 Authors@R:
     person("Bashar", "Al Agha", email = "ba8160@srmist.edu.in",
            role = c("aut", "cre"),

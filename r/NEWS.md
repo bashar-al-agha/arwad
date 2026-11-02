@@ -1,3 +1,19 @@
+# arwad 0.1.0.9006
+
+* New `aw_predict_pls()`: PLSpredict (k-fold cross-validated prediction), a
+  compiled replacement for `seminr::predict_pls()` with its arguments and
+  defaults. It draws the same folds from the same random-number stream,
+  estimates every training set with the compiled PLS-SEM kernel (on several
+  cores if asked), and returns `predict_pls()`'s object bit for bit, so
+  `summary()` reports the same RMSE and MAE for the PLS model and the
+  linear-model benchmark. Identical to `seminr` 2.6.0 on all 79 models of
+  composites in the test set, with earliest and direct antecedents, 5 to 10
+  folds, repetitions and leave-one-out. Models of composites (Mode A and
+  Mode B) are native with `seminr` 2.6.0 or later; models with reflective
+  constructs (which `seminr` 2.6.0 predicts with a different algorithm),
+  interaction terms, and every call under earlier `seminr` versions go to
+  `seminr` (ADR-0008).
+
 # arwad 0.1.0.9005
 
 * Licence: from this version on, Arwad is released under the Apache License

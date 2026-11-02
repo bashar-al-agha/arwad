@@ -10,8 +10,11 @@ export(aw_compile)
 export(aw_explain)
 export(aw_glm_fit)
 export(aw_pls_ci)
+export(aw_predict_pls)
 export(aw_source)
 export(aw_toolchain)
-importFrom(stats,.lm.fit)
-importFrom(stats,cor)
-importFrom(stats,cov)
+importFrom(stats,
+  .lm.fit,
+  cor,
+  cov
+)
