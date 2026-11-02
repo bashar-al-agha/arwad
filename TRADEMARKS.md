@@ -2,7 +2,7 @@
 
 "Arwad" is the name of this programming language and project, owned by Bashar Al Agha. Registration as a trademark is in preparation ([ADR-0003](docs/adr/0003-mit-licence-dco-clean-room.md)). This policy applies to the name and to any official logo.
 
-The code is MIT-licensed: you may use, modify and redistribute it freely. The *name* is different, because it tells users which software is the official one.
+The code is licensed under the Apache License 2.0: you may use, modify and redistribute it freely, under the licence's conditions. The *name* is different, because it tells users which software is the official one; Section 6 of the licence grants no permission to use it.
 
 ## Allowed without asking
 

@@ -1,3 +1,12 @@
+# arwad 0.1.0.9005
+
+* Licence: from this version on, Arwad is released under the Apache License
+  2.0 (ADR-0003, amendment of 2 November 2026). The licence adds a patent
+  licence from every contributor, states that it grants no right to the
+  name "Arwad", and asks redistributors to keep the `NOTICE` file. Every
+  earlier version, the v0.1.0 release included, remains available under the
+  MIT licence.
+
 # arwad 0.1.0.9004
 
 * `aw_boot_pls()`: the first stage of a model with two-stage interaction

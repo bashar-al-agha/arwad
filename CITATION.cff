@@ -18,7 +18,7 @@ identifiers:
     value: "10.5281/zenodo.23725078"
     description: "Version 0.1.0"
 repository-code: "https://github.com/bashar-al-agha/arwad"
-license: MIT
+license: Apache-2.0
 version: "0.1.0"
 date-released: "2026-10-28"
 keywords:

@@ -5,7 +5,7 @@
 
 ## Context
 
-The third Phase 2 engine is the PLS-SEM path algorithm with its bootstrap, the method behind most PLS-SEM studies in management research and the first engine planned for the PalmyraDoor research portal. The reference implementation in R is `seminr` (Ray, Danks and Calero Valdez; GPL-3). Researchers report `seminr` results, so the engine has to give the same numbers, not merely close ones. `seminr` is GPL-3 and Arwad is MIT, so the clean-room rule of [ADR-0003](0003-mit-licence-dco-clean-room.md) applies to it as it does to GNU R.
+The third Phase 2 engine is the PLS-SEM path algorithm with its bootstrap, the method behind most PLS-SEM studies in management research and the first engine planned for the PalmyraDoor research portal. The reference implementation in R is `seminr` (Ray, Danks and Calero Valdez; GPL-3). Researchers report `seminr` results, so the engine has to give the same numbers, not merely close ones. `seminr` is GPL-3 and Arwad is permissively licensed (MIT; the Apache License 2.0 since 2 November 2026), so the clean-room rule of [ADR-0003](0003-mit-licence-dco-clean-room.md) applies to it as it does to GNU R.
 
 ## Decision
 

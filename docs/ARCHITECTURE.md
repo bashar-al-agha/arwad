@@ -9,7 +9,7 @@ This document describes how Arwad is built and why. Decisions with lasting conse
 - Run R code unchanged, including any CRAN package.
 - Compile the numerical parts of R programs to native code with memory use known before execution and no garbage-collection pauses.
 - Produce results numerically equivalent to GNU R, including identical random-number streams for a given seed.
-- Remain MIT-licensed and clean-room with respect to GNU R's GPL source.
+- Remain permissively licensed (the Apache License 2.0; MIT up to version 0.1.0.9004) and clean-room with respect to GNU R's GPL source.
 
 **Non-goals (for now)**
 

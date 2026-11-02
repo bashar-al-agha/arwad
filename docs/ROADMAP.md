@@ -79,6 +79,6 @@ Data frames enter the static tier as column sets of known types.
 |---|---|
 | Two-tier architecture ([ADR-0001](adr/0001-two-tier-runtime.md)) | Implementation language of the dynamic tier (start of Phase 4) |
 | Goose as the first native back end ([ADR-0002](adr/0002-goose-native-backend.md)) | |
-| MIT, DCO, clean room, no patent, the name Arwad ([ADR-0003](adr/0003-mit-licence-dco-clean-room.md)) | |
+| MIT (the Apache License 2.0 since 2 November 2026), DCO, clean room, no patent, the name Arwad ([ADR-0003](adr/0003-mit-licence-dco-clean-room.md)) | |
 | Numerical-equivalence gate ([ADR-0004](adr/0004-numerical-equivalence-gate.md)) | |
 | Guarded native execution with GNU R as the fallback ([ADR-0005](adr/0005-guarded-native-execution.md)) | |

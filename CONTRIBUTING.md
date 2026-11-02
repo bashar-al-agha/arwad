@@ -7,7 +7,7 @@ Arwad is in Phase 0 ([docs/ROADMAP.md](docs/ROADMAP.md)). These rules apply equa
 1. **Clean room.** Never paste, translate or closely paraphrase GNU R source code (GPL). Work from the R manuals and from black-box comparison with GNU R. A pull request containing GPL-derived code is rejected.
 2. **Equivalence gate.** Any change that can affect a computed value includes an equivalence test against GNU R ([ADR-0004](docs/adr/0004-numerical-equivalence-gate.md)).
 3. **No unmeasured claims.** Performance statements follow [docs/BENCHMARK_METHOD.md](docs/BENCHMARK_METHOD.md) and include raw data.
-4. **Developer Certificate of Origin.** Sign off every commit with `git commit -s`. Contributions are licensed under MIT (inbound = outbound).
+4. **Developer Certificate of Origin.** Sign off every commit with `git commit -s`. Contributions are licensed under the Apache License 2.0 (inbound = outbound, as its Section 5 provides).
 
 ## Workflow
 

@@ -9,7 +9,7 @@ R's semantics (first-class closures, mutable cyclic environments, promises, S3/S
 
 ## Decision
 
-Split Arwad into a **dynamic tier** that implements R's object model and hosts packages, and a **static tier** that compiles type- and shape-specialised numerical code through Goose. In Phases 1–3 the dynamic tier is GNU R and Arwad is an R package; from Phase 4 a standalone, MIT-licensed dynamic tier is built with an R C-API compatibility layer.
+Split Arwad into a **dynamic tier** that implements R's object model and hosts packages, and a **static tier** that compiles type- and shape-specialised numerical code through Goose. In Phases 1–3 the dynamic tier is GNU R and Arwad is an R package; from Phase 4 a standalone dynamic tier under Arwad's own permissive licence ([ADR-0003](0003-mit-licence-dco-clean-room.md)) is built with an R C-API compatibility layer.
 
 ## Consequences
 

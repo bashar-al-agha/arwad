@@ -7,7 +7,7 @@
 </h1>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-1E3A5F?style=flat-square"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache%202.0-1E3A5F?style=flat-square"></a>
   <a href="https://doi.org/10.5281/zenodo.23725077"><img alt="DOI 10.5281/zenodo.23725077" src="https://zenodo.org/badge/DOI/10.5281/zenodo.23725077.svg"></a>
   <a href="docs/ROADMAP.md"><img alt="Status: Phase 2, three engines" src="https://img.shields.io/badge/Status-Phase%202%2C%20three%20engines-1E3A5F?style=flat-square"></a>
   <a href="https://github.com/bashar-al-agha/arwad/actions/workflows/r-check.yml"><img alt="R-CMD-check" src="https://github.com/bashar-al-agha/arwad/actions/workflows/r-check.yml/badge.svg"></a>
@@ -74,7 +74,7 @@ Arwad is Syria's only inhabited island: the ancient Phoenician city of Arados, w
 
 | Tier | Runs | Implementation |
 |---|---|---|
-| **Dynamic tier** | Everything R allows: closures, environments, lazy evaluation, S3/S4, `eval`, every CRAN package | Phases 1–3: GNU R itself, with Arwad shipped as an R package. Phase 4 onward: a new MIT-licensed R runtime with an R C-API compatibility layer |
+| **Dynamic tier** | Everything R allows: closures, environments, lazy evaluation, S3/S4, `eval`, every CRAN package | Phases 1–3: GNU R itself, with Arwad shipped as an R package. Phase 4 onward: a new R runtime under Arwad's licence, with an R C-API compatibility layer |
 | **Static tier** | Type- and shape-specialised numerical code | R function → typed IR → Goose → C → native code (TinyCC in-process, or clang/MSVC), called from R through `export fn` with zero-copy slices |
 
 Full design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -110,7 +110,7 @@ Details, durations and dependencies: [docs/ROADMAP.md](docs/ROADMAP.md).
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Two-tier design, compiler pipeline, risks, prior art |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | CRAN census and the compatibility strategy |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phases, tasks, exit criteria |
-| [docs/IP_AND_LICENSING.md](docs/IP_AND_LICENSING.md) | Copyright, MIT, trademark, patent assessment, licence compatibility |
+| [docs/IP_AND_LICENSING.md](docs/IP_AND_LICENSING.md) | Copyright, the Apache License 2.0, trademark, patent assessment, licence compatibility |
 | [docs/AGENT_TEAM.md](docs/AGENT_TEAM.md) | The ten builder–verifier duets and how they are run |
 | [docs/BENCHMARK_METHOD.md](docs/BENCHMARK_METHOD.md) | How performance is measured and reported |
 | [docs/adr/](docs/adr/) | Architecture decision records |
@@ -122,4 +122,4 @@ Details, durations and dependencies: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Licence
 
-[MIT](LICENSE) © 2026 Bashar Al Agha. See [TRADEMARKS.md](TRADEMARKS.md) for use of the project name.
+[Apache License 2.0](LICENSE) © 2026 Bashar Al Agha; redistributions keep the [NOTICE](NOTICE) file. Versions up to 0.1.0.9004, the v0.1.0 release included, were published under the MIT licence and remain available under it ([ADR-0003](docs/adr/0003-mit-licence-dco-clean-room.md), amendment). See [TRADEMARKS.md](TRADEMARKS.md) for use of the project name.
