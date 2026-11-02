@@ -8,6 +8,14 @@
   both stages 9% less (one core, 1,000 resamples, the same compiled kernel
   with and without the shortcut; ADR-0006, amendment "two-stage interaction
   terms").
+* Benchmark (bench/phase2/REPORT.md, §3d, now three rounds of 10,000
+  resamples, seminr's fastest against Arwad's median): 57.6 s on four cores
+  against 390.1 s for seminr 2.6.0 on the same cores, 6.8 times faster, and
+  3.2 times from one core, with identical arrays. The 4.0 times given for
+  0.1.0.9003 came from a single round in which the four workers were
+  unusually slow (0.78 of the one-core time, against 0.47 in the three
+  rounds); the shortcut above saves about 9% of a resample, and the rest of
+  the difference is that round's variation.
 
 # arwad 0.1.0.9003
 
