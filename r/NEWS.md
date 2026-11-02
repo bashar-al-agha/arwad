@@ -1,3 +1,14 @@
+# arwad 0.1.0.9004
+
+* `aw_boot_pls()`: the first stage of a model with two-stage interaction
+  terms now stops after its weights, which are all the second stage uses.
+  The loadings, paths, total effects and HTMT it no longer computes were
+  never used, so the results are unchanged, bit for bit. On the Primer's
+  moderation model the first stage takes 18% less time and a resample of
+  both stages 9% less (one core, 1,000 resamples, the same compiled kernel
+  with and without the shortcut; ADR-0006, amendment "two-stage interaction
+  terms").
+
 # arwad 0.1.0.9003
 
 * `aw_boot_pls()` runs models with two-stage interaction terms (moderation:

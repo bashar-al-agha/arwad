@@ -80,7 +80,10 @@ aw_boot_ols <- function(X, y, B = 1000L) {
 # run of this kernel on it), k1[a] is the column of X of its a-th indicator
 # and c1[a] that indicator's first-stage construct, and iv1[m] and md1[m]
 # are the first-stage constructs whose scores the m-th term multiplies.
-aw_pls_kernel <- function(X, blk, pos, nb, mode, pre, maxIt, crit, idx, ix, xj, k1, c1, iv1, md1, W1) {
+# wonly = 1 (the first-stage run) returns the weights alone, one row per
+# sample, and skips the rest of the estimation, which the second stage
+# does not use.
+aw_pls_kernel <- function(X, blk, pos, nb, mode, pre, maxIt, crit, idx, ix, xj, k1, c1, iv1, md1, W1, wonly) {
   # The sample size is the number of rows of idx: n for a bootstrap
   # resample, n - 1 for a leave-one-out (jackknife) sample.
   n <- nrow(idx)
@@ -89,7 +92,9 @@ aw_pls_kernel <- function(X, blk, pos, nb, mode, pre, maxIt, crit, idx, ix, xj, 
   R <- ncol(idx)
   JJ <- J * J
   pJ <- p * J
-  out <- matrix(0, R, p + pJ + 3L * JJ + 3L)
+  width <- p + pJ + 3L * JJ + 3L
+  if (wonly == 1L) width <- p
+  out <- matrix(0, R, width)
   Xb <- matrix(0, n, p)
   Z <- matrix(0, n, p)
   Ci <- matrix(0, p, p)
@@ -216,6 +221,10 @@ aw_pls_kernel <- function(X, blk, pos, nb, mode, pre, maxIt, crit, idx, ix, xj, 
       W <- Wn
       it <- iter
       if (dw < crit) break
+    }
+    if (wonly == 1L) {
+      for (k in seq_len(p)) out[r, k] <- W[k, blk[k]]
+      next
     }
     # Final scores (not rescaled), path coefficients, total effects. seminr
     # gives an interaction term's score the standard deviation of its product
@@ -457,7 +466,7 @@ aw_pls_spec <- function(model) {
   s1 <- aw_pls_spec_parts(mm[mm[, "construct"] %in% cons1, , drop = FALSE], sm1, cons1, obs)
   if (is.null(s1)) return(NULL)
   spec$stage1 <- c(list(X = X), s1, list(maxIt = 300L, crit = 10^-7, cons = cons1, items = obs, ix = integer(length(obs)),
-                                         xj = integer(length(cons1))))
+                                         xj = integer(length(cons1)), wonly = 1L))
   spec$k1 <- match(obs, items)
   spec$c1 <- s1$blk
   spec$iv1 <- match(ints[, "iv"], cons1)
@@ -529,8 +538,9 @@ aw_pls_call <- function(kernel, spec, idx, W1 = NULL) {
   c1 <- if (is.null(spec$c1)) 0L else spec$c1
   iv1 <- if (is.null(spec$iv1)) 0L else spec$iv1
   md1 <- if (is.null(spec$md1)) 0L else spec$md1
+  wonly <- if (is.null(spec$wonly)) 0L else spec$wonly
   kernel(spec$X, spec$blk, spec$pos, spec$nb, spec$mode, spec$pre, spec$maxIt, spec$crit, idx, spec$ix, spec$xj, k1, c1, iv1,
-         md1, W1)
+         md1, W1, wonly)
 }
 
 aw_pls_unit <- function() {
