@@ -56,6 +56,20 @@ test_that("aw_predict_pls() repeats the cross-validation and runs leave-one-out 
     r <- aw_predict_both(ecsi, 42L, technique = cfg[[1L]], noFolds = cfg[[2L]], reps = cfg[[3L]])
     expect_same_prediction(r$got, r$want, paste("reps", cfg[[3L]]))
     expect_true(r$same_rng, label = paste("reps", cfg[[3L]], "random-number state"))
+    if (cfg[[3L]] < 2L) next
+    # The repetitions' averages, against single runs from the same stream; a
+    # failure names the forms of averaging that would have matched.
+    set.seed(42L)
+    one <- lapply(seq_len(cfg[[3L]]), function(i) suppressWarnings(suppressMessages(
+      seminr::predict_pls(ecsi, technique = cfg[[1L]], noFolds = cfg[[2L]]))))
+    for (el in c("PLS_out_of_sample", "PLS_in_sample", "lm_out_of_sample", "lm_in_sample")) {
+      A <- simplify2array(lapply(one, function(z) unname(z$items[[el]])))
+      w <- unname(r$want$items[[el]])
+      why <- sprintf("mean() %s, rowMeans() %s, sum() / reps %s, Reduce(`+`) / reps %s", identical(apply(A, c(1L, 2L), mean), w),
+                     identical(rowMeans(A, dims = 2L), w), identical(apply(A, c(1L, 2L), sum) / dim(A)[3L], w),
+                     identical(Reduce(`+`, lapply(seq_len(dim(A)[3L]), function(i) A[, , i])) / dim(A)[3L], w))
+      expect_identical(unname(r$got$items[[el]]), w, label = paste("reps", cfg[[3L]], el, "average; seminr's equals", why))
+    }
   }
   # Leave-one-out (noFolds = NULL) on the smallest model of composites.
   comp <- Filter(function(m) !any(m$mmMatrix[, "type"] == "C"), fits)
@@ -79,6 +93,82 @@ test_that("aw_predict_pls() repeats the cross-validation and runs leave-one-out 
   r <- aw_predict_both(m, 3L, technique = seminr::predict_DA, noFolds = 10L)
   expect_same_prediction(r$got, r$want, "row names")
   expect_identical(utils::capture.output(summary(r$got)), utils::capture.output(summary(r$want)))
+})
+
+# Training sets of a few models: each model re-estimated by seminr on 90% of
+# its cases, in shuffled order, with its own settings, and the held-out rest.
+aw_predict_folds <- function() {
+  fits <- aw_pls_fit_models()
+  comp <- Filter(function(m) !any(m$mmMatrix[, "type"] == "C"), fits)
+  pick <- unique(c(intersect(c("mobi_ecsi_core", "mobi_ecsi_full", "corp_rep_extended_modeB"), names(comp)), names(comp)[c(5L, 20L, 40L)]))
+  lapply(stats::setNames(pick, pick), function(nm) {
+    m <- comp[[nm]]
+    n <- nrow(m$data)
+    set.seed(9)
+    perm <- sample(n)
+    tr <- m$data[perm[seq_len(n - n %/% 10L)], , drop = FALSE]
+    list(model = suppressMessages(seminr::estimate_pls(tr, m$measurement_model, m$structural_model, maxIt = m$settings$maxIt,
+                                                        stopCriterion = m$settings$stopCriterion)),
+         train = tr, test = m$data[perm[-seq_len(n - n %/% 10L)], , drop = FALSE])
+  })
+}
+
+# These two tests pin down, platform by platform, the arithmetic that
+# aw_predict_pls() takes from seminr; a failure names the alternative forms
+# that would have matched.
+test_that("fold models standardise with the means and standard deviations estimate_pls() stores", {
+  skip_if_not_installed("seminr")
+  skip_if_old_seminr()
+  for (nm in names(folds <- aw_predict_folds())) {
+    mt <- folds[[nm]]$model
+    items <- as.vector(mt$mmVariables)
+    X <- as.matrix(folds[[nm]]$train[, items])
+    sc <- arwad:::aw_pls_train_scale(X)
+    md <- unname(mt$meanData[items])
+    sd <- unname(mt$sdData[items])
+    mc <- colMeans(X)
+    mm <- apply(X, 2L, mean)
+    why <- sprintf("means as colMeans() %s, mean() %s; sds centred by colMeans() %s, by mean() %s, sd() %s",
+                   identical(unname(mc), md), identical(unname(mm), md),
+                   identical(unname(sqrt(colSums(sweep(X, 2L, mc)^2) / (nrow(X) - 1L))), sd),
+                   identical(unname(sqrt(colSums(sweep(X, 2L, mm)^2) / (nrow(X) - 1L))), sd), identical(unname(apply(X, 2L, stats::sd)), sd))
+    expect_identical(unname(sc$mu), md, label = paste(nm, "training means;", why))
+    expect_identical(unname(sc$s), sd, label = paste(nm, "training sds;", why))
+  }
+})
+
+test_that("a fold model predicts held-out cases as predict() does", {
+  skip_if_not_installed("seminr")
+  skip_if_old_seminr()
+  for (nm in names(folds <- aw_predict_folds())) {
+    mt <- folds[[nm]]$model
+    spec <- arwad:::aw_pls_spec(mt)
+    p <- length(spec$items)
+    W <- mt$outer_weights[spec$items, spec$cons, drop = FALSE]
+    o <- c(W[cbind(seq_len(p), spec$blk)], as.vector(mt$outer_loadings[spec$items, spec$cons]), as.vector(mt$path_coef[spec$cons, spec$cons]))
+    ord <- arwad:::aw_pls_order(spec$pre)
+    Xte <- as.matrix(folds[[nm]]$test[, spec$items])
+    mu <- mt$meanData[spec$items]
+    s <- mt$sdData[spec$items]
+    for (ea in c(TRUE, FALSE)) {
+      pr <- predict(mt, testData = folds[[nm]]$test, technique = if (ea) seminr::predict_EA else seminr::predict_DA)
+      got <- arwad:::aw_pls_fold_predict(o, spec, Xte, mu, s, ea, ord)
+      want <- unname(as.matrix(pr$predicted_composite_scores)[, spec$cons])
+      # The chain by explicit products, without BLAS.
+      S <- t((t(Xte) - mu) / s) %*% W
+      P <- S
+      for (j in ord) if (any(spec$pre[, j] > 0)) {
+        v <- 0
+        for (i in which(spec$pre[, j] > 0)) v <- v + (if (ea) P else S)[, i] * mt$path_coef[spec$cons[i], spec$cons[j]]
+        P[, j] <- v
+      }
+      why <- sprintf("composite scores Z %%*%% W %s; endogenous scores by explicit products %s", identical(unname(S[, -which(colSums(spec$pre > 0) > 0)]),
+                     want[, -which(colSums(spec$pre > 0) > 0)]), identical(unname(P), want))
+      lab <- paste(nm, if (ea) "EA" else "DA")
+      expect_identical(unname(got$scores), want, label = paste(lab, "scores;", why))
+      expect_identical(unname(got$items), unname(as.matrix(pr$predicted_items)[, spec$items]), label = paste(lab, "items;", why))
+    }
+  }
 })
 
 test_that("aw_predict_pls() gives the same result on several cores", {

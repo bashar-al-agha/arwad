@@ -21,8 +21,9 @@
 #   construct), and predicts with X %*% b, in sample too;
 # - a case's in-sample prediction is the sum, in long double, of the
 #   predictions of the k - 1 fold models it trained, over k - 1; the item
-#   predictions of the repetitions are averaged with rowMeans(), and the
-#   composite predictions are those of the last repetition.
+#   predictions of the repetitions are averaged with mean() (rowMeans()
+#   differs on Linux), and the composite predictions are those of the last
+#   repetition.
 
 # The constructs in an order in which each one follows its antecedents
 # (pre[i, j] > 0 when construct i is an antecedent of j); NULL for a
@@ -39,6 +40,17 @@ aw_pls_order <- function(pre) {
   }
   out
 }
+
+# The training means and standard deviations a fold model standardises
+# with, as estimate_pls() stores them (meanData, sdData).
+aw_pls_train_scale <- function(Xtr) {
+  sc <- scale(Xtr)
+  list(mu = attr(sc, "scaled:center"), s = attr(sc, "scaled:scale"))
+}
+
+# The average of the repetitions' predictions, element by element: x is a
+# list of equal-sized matrices.
+aw_pls_rep_mean <- function(x) apply(simplify2array(x), c(1L, 2L), mean)
 
 # One fold model's predictions for the cases in the rows of Xs: the
 # indicators, scaled back with the training means mu and standard
@@ -195,9 +207,9 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
       tr <- perms[[r]][-tps[[f]]]
       Xtr <- X[tr, , drop = FALSE]
       Xte <- X[te, , drop = FALSE]
-      sc <- scale(Xtr)
-      mu <- attr(sc, "scaled:center")
-      s <- attr(sc, "scaled:scale")
+      sc <- aw_pls_train_scale(Xtr)
+      mu <- sc$mu
+      s <- sc$s
       o <- fits[[(r - 1L) * k + f]]
       pin <- aw_pls_fold_predict(o, spec, Xtr, mu, s, ea, ord)
       pout <- aw_pls_fold_predict(o, spec, Xte, mu, s, ea, ord)
@@ -218,7 +230,7 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
                           ins_lm = rowSums(ins_lm, dims = 2L, na.rm = TRUE) / (k - 1L), oos_sc = oos_sc,
                           ins_sc = rowSums(ins_sc, dims = 2L, na.rm = TRUE) / (k - 1L))
   }
-  avg <- function(el) rowMeans(simplify2array(lapply(reps_out, `[[`, el)), dims = 2L)
+  avg <- function(el) aw_pls_rep_mean(lapply(reps_out, `[[`, el))
   items <- spec$items[yi]
   actual <- model$data[, items, drop = FALSE]
   # The data's row names label the predictions of a single run (reps =
