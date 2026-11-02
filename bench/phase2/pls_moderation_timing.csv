@@ -1,0 +1,8 @@
+"contender","replicates","median_ms","arwad_speedup"
+"arwad",1000,12360,1
+"arwad_all_cores",1000,8097,0.65
+"seminr_all_cores",1000,39130,3.17
+"seminr_one_core",1000,101600,8.22
+"arwad",10000,125980,1
+"arwad_all_cores",10000,97730,0.78
+"seminr_all_cores",10000,386930,3.07

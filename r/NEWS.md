@@ -10,11 +10,22 @@
   that product's standard deviation. On 34 test models (the Primer's
   corporate reputation model with switching costs moderating CUSA -> CUSL,
   ECSI variants, a quadratic term and 24 synthetic models) the estimates and
-  bootstraps are bit-identical to seminr 2.6.0 and 2.5.0 (HTMT within two
+  bootstraps are bit-identical to seminr 2.6.0 and 2.5.0 (HTMT within four
   units in the last place). BCa intervals work for these models too.
   Product-indicator and orthogonal terms, and consistent PLS with
   interaction terms, are still handed to seminr (ADR-0006, amendment
   "two-stage interaction terms").
+* Benchmark (bench/phase2/REPORT.md, §3d): 10,000 resamples of the Primer's
+  corporate reputation model with switching costs moderating CUSA -> CUSL
+  took 97.7 s on four cores against 386.9 s for seminr 2.6.0 on the same
+  cores, 4.0 times faster (one round; 3.1 times from one core), with
+  identical arrays. The gain is smaller than for models without an
+  interaction term because every resample is estimated twice; the first
+  stage still computes loadings, paths and HTMT that only the second needs,
+  the next optimisation. Correction: the benchmark put one of its 45,000
+  HTMT values four units in the last place from seminr's, so the entry
+  above now says four units, the bound the tests check (it said two, from
+  the 3-resample tests).
 
 # arwad 0.1.0.9002
 

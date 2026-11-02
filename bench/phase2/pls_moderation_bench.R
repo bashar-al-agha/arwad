@@ -71,7 +71,7 @@ res <- rbind(res, data.frame(contender = names(t10), replicates = 10000L, median
                              arwad_speedup = round(unname(t10) / t10[["arwad"]], 2)))
 print(res, row.names = FALSE)
 est <- model$path_coef["CUSA*SC", "CUSL"]
-cat(sprintf(paste0("\nCorporate reputation moderation model (two-stage, CUSA*SC -> CUSL): 10 constructs, 36 indicators + 1 product, ",
+cat(sprintf(paste0("\nCorporate reputation moderation model (two-stage, CUSA*SC -> CUSL): 10 constructs, 35 indicators + 1 product, ",
                    "n = %d, maxIt = 3000; cores = %d; first call (build) %.2f s\n",
                    "interaction path %.4f; its 95%% percentile interval from Arwad's 10,000 resamples: [%.4f, %.4f]\n",
                    "identical to seminr (paths, loadings, weights, total effects, boots): %s; at 10,000 resamples: %s\n",
