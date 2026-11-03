@@ -114,14 +114,26 @@ test_that("aw_predict_pls() repeats the cross-validation and runs leave-one-out 
 
 test_that("the repetitions' average is mean() of each element, bit for bit, compiled", {
   skip_if_no_toolchain()
-  odd <- c(-0, 0, NA, NaN, Inf, -Inf, 1e308, 1e-300, 1 / 3, 2.5)
+  # Signed zeros, extremes whose sum overflows, small and repeating values,
+  # infinities; NA and NaN only in elements of their own (R leaves to the
+  # platform which of the two a mix of them gives). A failure lists each
+  # differing element: its values, then mean()'s result and the unit's.
+  odd <- c(-0, 0, Inf, -Inf, 1e308, 1e-300, 1 / 3, 2.5)
   set.seed(3)
   for (R in c(1L, 2L, 3L, 10L)) {
-    x <- lapply(seq_len(R), function(r) matrix(c(sample(odd), stats::rnorm(30, 4, 2)), 8, 5))
+    x <- lapply(seq_len(R), function(r) matrix(c(sample(odd), stats::rnorm(32, 4, 2)), 8, 5))
     x[[1L]][1L, 1L] <- -0
+    x[[1L]][3L, 3L] <- NA
+    x[[R]][4L, 4L] <- NaN
     if (R > 1L) x[[R]][2L, 2L] <- 1e308
-    want <- apply(simplify2array(x), c(1L, 2L), mean)
-    expect_true(identical(arwad:::aw_pls_rep_mean(x), want, num.eq = FALSE), label = paste(R, "repetitions"))
+    A <- simplify2array(x)
+    want <- apply(A, c(1L, 2L), mean)
+    got <- arwad:::aw_pls_rep_mean(x)
+    same <- vapply(seq_along(want), function(i) identical(got[i], want[i], num.eq = FALSE), NA)
+    dim(A) <- c(length(want), R)
+    why <- vapply(which(!same), function(i) sprintf("[%d] %s: mean() %a, compiled %a", i, paste(sprintf("%a", A[i, ]), collapse = " "),
+                                                    want[i], got[i]), "")
+    expect_true(all(same), label = paste(R, "repetitions;", paste(why, collapse = "; ")))
   }
   u <- arwad:::aw_pls_rep_mean_unit()
   expect_s3_class(u, "arwad_function")
