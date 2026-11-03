@@ -1,0 +1,7 @@
+"round","design","seminr_s","seminr_all_cores_s","arwad_s","arwad_all_cores_s","identical"
+1,"kfold_10x10",7.7,9.86,0.64,3.9,TRUE
+1,"loocv",25.88,13.06,2.75,3.26,TRUE
+2,"kfold_10x10",7.7,9.89,0.67,3.66,TRUE
+2,"loocv",25.83,12.67,2.5,3.58,TRUE
+3,"kfold_10x10",7.73,10.09,0.68,3.7,TRUE
+3,"loocv",25.68,12.49,2.73,3.29,TRUE

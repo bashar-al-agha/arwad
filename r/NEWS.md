@@ -11,7 +11,10 @@
   folds, repetitions and leave-one-out, under R's reference BLAS and under
   OpenBLAS (as R uses it on Linux), whose rounding depends on the shape of
   each matrix product: Arwad forms the products in the shapes `seminr`
-  uses. Models of composites (Mode A and
+  uses. On the Primer's extended corporate reputation model, 10 folds and
+  10 repetitions take 0.67 s on one core against 7.70 s for `seminr`
+  (11.5 times faster), leave-one-out 2.73 s against 12.49 s on four cores
+  (4.6 times; `bench/phase2/REPORT.md`, section 3e). Models of composites (Mode A and
   Mode B) are native with `seminr` 2.6.0 or later; models with reflective
   constructs (which `seminr` 2.6.0 predicts with a different algorithm),
   interaction terms, and every call under earlier `seminr` versions go to
