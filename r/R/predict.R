@@ -29,8 +29,8 @@
 # - a case's in-sample prediction is the sum, in long double, of the
 #   predictions of the k - 1 fold models it trained, over k - 1; the item
 #   predictions of the repetitions are averaged with mean() (rowMeans()
-#   differs on Linux), and the composite predictions are those of the last
-#   repetition.
+#   differs on macOS arm64, which has no long double), and the composite
+#   predictions are those of the last repetition.
 
 # The constructs in an order in which each one follows its antecedents
 # (pre[i, j] > 0 when construct i is an antecedent of j); NULL for a
@@ -55,9 +55,31 @@ aw_pls_train_scale <- function(Xtr) {
   list(mu = attr(sc, "scaled:center"), s = attr(sc, "scaled:scale"))
 }
 
-# The average of the repetitions' predictions, element by element: x is a
-# list of equal-sized matrices.
-aw_pls_rep_mean <- function(x) apply(simplify2array(x), c(1L, 2L), mean)
+# The average of the repetitions' predictions, element by element, as
+# mean() computes it (x is a list of equal-sized matrices): with one
+# repetition the predictions themselves plus 0 (mean() turns -0 into 0);
+# with several, a compiled loop calling mean() once per element, which runs
+# GNU R's algorithm, extended precision included, at C speed.
+aw_pls_rep_mean <- function(x) {
+  if (length(x) == 1L) return(x[[1L]] + 0)
+  a <- simplify2array(x)
+  d <- dim(a)
+  dim(a) <- c(d[1L] * d[2L], d[3L])
+  matrix(aw_pls_rep_mean_unit()(t(a)), d[1L], d[2L])
+}
+
+# The mean of each column of M; compiled on first use.
+aw_pls_rep_mean_kernel <- function(M) {
+  nc <- ncol(M)
+  z <- numeric(nc)
+  for (j in seq_len(nc)) z[j] <- mean(M[, j])
+  z
+}
+
+aw_pls_rep_mean_unit <- function() {
+  if (is.null(aw_state$rep_mean)) aw_state$rep_mean <- aw_compile(aw_pls_rep_mean_kernel, name = "aw_pls_rep_mean")
+  aw_state$rep_mean
+}
 
 # One fold model's predictions for the cases in the rows of Xs: the
 # indicators, scaled back with the training means mu and standard

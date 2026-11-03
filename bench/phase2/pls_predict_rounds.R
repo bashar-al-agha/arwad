@@ -36,7 +36,7 @@ model <- suppressMessages(estimate_pls(corp_rep_data, mm, sm, maxIt = 3000L))
 seed <- 123L
 cores <- parallel::detectCores()
 set.seed(seed)
-stopifnot(aw_predict_pls(model, technique = predict_EA, noFolds = 10L)$native)  # builds the engine (not timed)
+stopifnot(aw_predict_pls(model, technique = predict_EA, noFolds = 10L, reps = 2L)$native)  # builds the engine and the averaging unit (not timed)
 
 same <- function(a, s) isTRUE(a$native) && identical(unclass(a)[names(s)], unclass(s), num.eq = FALSE)
 time_run <- function(f) {
