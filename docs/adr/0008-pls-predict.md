@@ -33,6 +33,8 @@ The first continuous-integration runs failed on Linux on almost every model whil
 
 Items 3 and 4 state the result. The tests now include that model, and when the fold-prediction test fails, its message names which of these forms would have matched.
 
+The compiled average of the repetitions (item 5) uses the `mean()` of Arwad's runtime, which matches GNU R's on x86-64 and arm64 for NA, NaN, signed zeros and infinities. One difference turned up in its test on macOS arm64, where there is no extended precision: finite values whose sum overflows. For (−0, v, v) with v = `0x1.1ccf385ebc8a3p+1023` (R's parse of `1e308` there), GNU R 4.6.0 returned `0x1.7bbef5d3a60dap+1022`, one unit in the last place above the correctly rounded mean `0x1.7bbef5d3a60d9p+1022`. Arwad's runtime returns the correctly rounded value, and so do both on x86-64. Six formulas tried in double arithmetic all give the correctly rounded value, so GNU R's arm64 result is not matched yet. Predictions, which are values of the indicators, never come near that range; the test keeps its extremes below it.
+
 ## Consequences
 
 - PLSpredict runs at compiled speed and returns exactly what researchers already report from `seminr`, so `summary()` and any downstream code are unchanged.
