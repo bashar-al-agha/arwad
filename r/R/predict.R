@@ -9,16 +9,23 @@
 #   without the fold, in shuffled order, estimated with the model's own
 #   maxIt and stop criterion;
 # - a fold model predicts a case from its indicators standardised with the
-#   training means and the standard deviations of scale(): composite scores
-#   Z %*% W, then each endogenous construct, after its antecedents, from the
-#   predicted scores of its antecedents (earliest antecedents) or from their
-#   composite scores (direct antecedents), then the indicators from the
-#   scores and the loadings, scaled back;
-# - the linear-model benchmark regresses indicators of endogenous constructs
-#   (.lm.fit() with an intercept, raw training data) on the indicators of the
-#   exogenous constructs (earliest antecedents; all endogenous indicators in
-#   one fit) or of the construct's direct antecedents (one fit per
-#   construct), and predicts with X %*% b, in sample too;
+#   training means and the standard deviations of scale(): each construct's
+#   composite scores, one matrix-vector product over its own indicators,
+#   then each endogenous construct, after its antecedents, one over its
+#   antecedents (in the model's construct order), from their predicted
+#   scores (earliest antecedents) or their composite scores (direct
+#   antecedents), then the indicators from the scores and the loadings,
+#   scaled back;
+# - the linear-model benchmark regresses the indicators of each endogenous
+#   construct (.lm.fit() with an intercept, raw training data) on the
+#   indicators of every exogenous construct (earliest antecedents, whether
+#   it reaches the construct or not) or of the construct's direct
+#   antecedents, and predicts with X %*% b, one construct at a time, in
+#   sample too;
+# - the shapes of those products are seminr's: an optimised BLAS (OpenBLAS
+#   on Linux) rounds one wide product, or a product with zero weights,
+#   differently from the narrower products, where R's reference BLAS gives
+#   the same result for all of them;
 # - a case's in-sample prediction is the sum, in long double, of the
 #   predictions of the k - 1 fold models it trained, over k - 1; the item
 #   predictions of the repetitions are averaged with mean() (rowMeans()
@@ -59,29 +66,46 @@ aw_pls_rep_mean <- function(x) apply(simplify2array(x), c(1L, 2L), mean)
 aw_pls_fold_predict <- function(o, spec, Xs, mu, s, ea, ord) {
   p <- length(spec$items)
   J <- length(spec$cons)
-  W <- matrix(0, p, J)
-  W[cbind(seq_len(p), spec$blk)] <- o[seq_len(p)]
+  w <- o[seq_len(p)]
   L <- matrix(o[p + seq_len(p * J)], p, J)
   B <- matrix(o[p + p * J + seq_len(J * J)], J, J)
   Z <- t((t(Xs) - mu) / s)
-  S <- Z %*% W
+  # One matrix-vector product per construct, over its own indicators, and
+  # per endogenous construct, over its antecedents: an optimised BLAS
+  # (OpenBLAS) rounds these differently from one product with the zeros.
+  S <- matrix(0, nrow(Z), J)
+  for (j in seq_len(J)) {
+    k <- which(spec$blk == j)
+    S[, j] <- Z[, k, drop = FALSE] %*% w[k]
+  }
   P <- S
-  for (j in ord) if (any(spec$pre[, j] > 0)) P[, j] <- (if (ea) P else S) %*% B[, j]
+  for (j in ord) {
+    a <- which(spec$pre[, j] > 0)
+    if (length(a)) P[, j] <- (if (ea) P else S)[, a, drop = FALSE] %*% B[a, j]
+  }
   list(items = t(t(P %*% t(L)) * s + mu), scores = P)
 }
 
 # The linear-model benchmark's regressions: for each, the columns of the
-# predictors and of the predicted indicators. With direct antecedents the
-# predictors are the indicators of each antecedent in turn, the antecedents
-# in their order in the structural model (sm), which sets the rounding of
-# the least-squares fit.
+# predictors and of the predicted indicators, and in by the positions in y
+# of each endogenous construct's indicators, predicted one construct at a
+# time. With earliest antecedents one fit serves every endogenous construct
+# (.lm.fit() solves each column of y on its own, so the coefficients are
+# those of one fit per construct); with direct antecedents the predictors
+# are the indicators of each antecedent in turn, the antecedents in their
+# order in the structural model (sm), which sets the rounding of the
+# least-squares fit.
 aw_pls_lm_sets <- function(spec, ea, sm) {
   endo <- which(colSums(spec$pre > 0) > 0)
   exo <- setdiff(seq_along(spec$cons), endo)
-  if (ea) return(list(list(x = which(spec$blk %in% exo), y = which(spec$blk %in% endo))))
+  if (ea) {
+    y <- which(spec$blk %in% endo)
+    return(list(list(x = which(spec$blk %in% exo), y = y, by = unname(split(seq_along(y), spec$blk[y])))))
+  }
   lapply(endo, function(j) {
     ants <- match(sm[sm[, "target"] == spec$cons[j], "source"], spec$cons)
-    list(x = unlist(lapply(ants, function(a) which(spec$blk == a))), y = which(spec$blk == j))
+    y <- which(spec$blk == j)
+    list(x = unlist(lapply(ants, function(a) which(spec$blk == a))), y = y, by = list(seq_along(y)))
   })
 }
 
@@ -221,9 +245,13 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
         A <- cbind(1, Xtr[, st$x, drop = FALSE])
         fit <- .lm.fit(A, Xtr[, st$y, drop = FALSE])
         if (fit$rank < ncol(A)) return(back())
-        cols <- match(st$y, yi)
-        oos_lm[te, cols] <- cbind(1, Xte[, st$x, drop = FALSE]) %*% fit$coefficients
-        ins_lm[tr, cols, f] <- A %*% fit$coefficients
+        Ate <- cbind(1, Xte[, st$x, drop = FALSE])
+        b <- as.matrix(fit$coefficients)
+        for (g in st$by) {
+          cols <- match(st$y[g], yi)
+          oos_lm[te, cols] <- Ate %*% b[, g, drop = FALSE]
+          ins_lm[tr, cols, f] <- A %*% b[, g, drop = FALSE]
+        }
       }
     }
     reps_out[[r]] <- list(oos = oos, ins = rowSums(ins, dims = 2L, na.rm = TRUE) / (k - 1L), oos_lm = oos_lm,

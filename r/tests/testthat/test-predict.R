@@ -71,6 +71,23 @@ test_that("aw_predict_pls() repeats the cross-validation and runs leave-one-out 
       expect_identical(unname(r$got$items[[el]]), w, label = paste("reps", cfg[[3L]], el, "average; seminr's equals", why))
     }
   }
+  # An exogenous construct (Quality) that does not reach every endogenous
+  # one (Expectation): the benchmark under earliest antecedents still
+  # regresses each endogenous construct on the indicators of every
+  # exogenous construct.
+  mmr <- seminr::constructs(seminr::composite("Image", seminr::multi_items("IMAG", 1:5)),
+                            seminr::composite("Expectation", seminr::multi_items("CUEX", 1:3)),
+                            seminr::composite("Quality", seminr::multi_items("PERQ", 1:7)),
+                            seminr::composite("Value", seminr::multi_items("PERV", 1:2)),
+                            seminr::composite("Satisfaction", seminr::multi_items("CUSA", 1:3)))
+  smr <- seminr::relationships(seminr::paths(from = "Image", to = "Expectation"), seminr::paths(from = "Quality", to = "Value"),
+                               seminr::paths(from = c("Expectation", "Value"), to = "Satisfaction"))
+  mr <- suppressMessages(seminr::estimate_pls(seminr::mobi, mmr, smr))
+  for (tech in list(seminr::predict_EA, seminr::predict_DA)) {
+    r <- aw_predict_both(mr, 11L, technique = tech, noFolds = 10L)
+    expect_same_prediction(r$got, r$want, "partial reach")
+    expect_true(r$same_rng)
+  }
   # Leave-one-out (noFolds = NULL) on the smallest model of composites.
   comp <- Filter(function(m) !any(m$mmMatrix[, "type"] == "C"), fits)
   small <- comp[[which.min(vapply(comp, function(m) nrow(m$data), 1L))]]
@@ -154,16 +171,26 @@ test_that("a fold model predicts held-out cases as predict() does", {
       pr <- predict(mt, testData = folds[[nm]]$test, technique = if (ea) seminr::predict_EA else seminr::predict_DA)
       got <- arwad:::aw_pls_fold_predict(o, spec, Xte, mu, s, ea, ord)
       want <- unname(as.matrix(pr$predicted_composite_scores)[, spec$cons])
-      # The chain by explicit products, without BLAS.
-      S <- t((t(Xte) - mu) / s) %*% W
-      P <- S
-      for (j in ord) if (any(spec$pre[, j] > 0)) {
-        v <- 0
-        for (i in which(spec$pre[, j] > 0)) v <- v + (if (ea) P else S)[, i] * mt$path_coef[spec$cons[i], spec$cons[j]]
-        P[, j] <- v
+      # The composite scores as one product with the zero weights and one
+      # construct at a time; the chain over the antecedents, over the whole
+      # path column and by explicit products, without BLAS. A BLAS like
+      # OpenBLAS tells these apart; R's reference BLAS does not.
+      Z <- t((t(Xte) - mu) / s)
+      S <- Z %*% W
+      S1 <- sapply(seq_along(spec$cons), function(j) { k <- which(spec$blk == j); Z[, k, drop = FALSE] %*% W[k, j] })
+      B <- mt$path_coef[spec$cons, spec$cons]
+      chain <- function(f) {
+        P <- S1
+        for (j in ord) if (any(spec$pre[, j] > 0)) P[, j] <- f(if (ea) P else S1, j, which(spec$pre[, j] > 0))
+        unname(P)
       }
-      why <- sprintf("composite scores Z %%*%% W %s; endogenous scores by explicit products %s", identical(unname(S[, -which(colSums(spec$pre > 0) > 0)]),
-                     want[, -which(colSums(spec$pre > 0) > 0)]), identical(unname(P), want))
+      endo <- which(colSums(spec$pre > 0) > 0)
+      why <- sprintf(paste("composite scores one construct at a time %s, as Z %%*%% W %s; endogenous scores over the antecedents %s,",
+                           "over the path column %s, by explicit products %s"),
+                     identical(unname(S1[, -endo]), want[, -endo]), identical(unname(S[, -endo]), want[, -endo]),
+                     identical(chain(function(X, j, a) X[, a, drop = FALSE] %*% B[a, j]), want),
+                     identical(chain(function(X, j, a) X %*% B[, j]), want),
+                     identical(chain(function(X, j, a) { v <- 0; for (i in a) v <- v + X[, i] * B[i, j]; v }), want))
       lab <- paste(nm, if (ea) "EA" else "DA")
       expect_identical(unname(got$scores), want, label = paste(lab, "scores;", why))
       expect_identical(unname(got$items), unname(as.matrix(pr$predicted_items)[, spec$items]), label = paste(lab, "items;", why))

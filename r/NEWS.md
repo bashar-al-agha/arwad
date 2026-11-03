@@ -8,7 +8,10 @@
   `summary()` reports the same RMSE and MAE for the PLS model and the
   linear-model benchmark. Identical to `seminr` 2.6.0 on all 79 models of
   composites in the test set, with earliest and direct antecedents, 5 to 10
-  folds, repetitions and leave-one-out. Models of composites (Mode A and
+  folds, repetitions and leave-one-out, under R's reference BLAS and under
+  OpenBLAS (as R uses it on Linux), whose rounding depends on the shape of
+  each matrix product: Arwad forms the products in the shapes `seminr`
+  uses. Models of composites (Mode A and
   Mode B) are native with `seminr` 2.6.0 or later; models with reflective
   constructs (which `seminr` 2.6.0 predicts with a different algorithm),
   interaction terms, and every call under earlier `seminr` versions go to
