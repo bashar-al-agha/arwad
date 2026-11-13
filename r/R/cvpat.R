@@ -58,6 +58,15 @@ aw_cvpat_loss_mat <- function(E, endo, col_idx) {
 # averaging over repetitions.
 aw_cvpat_overall <- function(L) cbind(L, Overall = rowMeans(L))
 
+# The mean loss per row of a table: colMeans() for the constructs and mean()
+# for "Overall", as seminrExtras computes them. The two differ in the last
+# bit where R has no extended precision (macOS arm64), which the 15-digit
+# columns of assess_cvpat_compare() show.
+aw_cvpat_col_means <- function(L) {
+  J <- ncol(L) - 1L
+  c(colMeans(L[, seq_len(J), drop = FALSE]), Overall = mean(L[, J + 1L]))
+}
+
 # Native cross-validated per-observation loss matrices (PLS and optionally LM)
 # averaged over R sequential single-rep runs on the caller's RNG stream, using
 # one batched aw_pls_run_cores() pass per fold size. Returns NULL when the
@@ -285,8 +294,8 @@ aw_assess_cvpat <- function(seminr_model, testtype = "two.sided", nboot = 2000, 
   for (j in seq_len(J)) tp_ia[j, ] <- aw_cvpat_slot(LI[, j] - LP[, j], B, testtype)
   for (j in seq_len(J)) tp_lm[j, ] <- aw_cvpat_slot(LL[, j] - LP[, j], B, testtype)
   mk_tab <- function(LB, tp, bench_col) {
-    c1 <- colMeans(LP)
-    c2 <- colMeans(LB)
+    c1 <- aw_cvpat_col_means(LP)
+    c2 <- aw_cvpat_col_means(LB)
     c3 <- c1 - c2
     m <- cbind(
       as.numeric(format(c1)),
@@ -412,8 +421,8 @@ aw_assess_cvpat_compare <- function(established_model, alternative_model, testty
   tp <- matrix(NA_real_, J + 1L, 2L)
   tp[J + 1L, ] <- aw_cvpat_slot(L_alt[, J + 1L] - L_base[, J + 1L], B, testtype)
   for (j in seq_len(J)) tp[j, ] <- aw_cvpat_slot(L_alt[, j] - L_base[, j], B, testtype)
-  c1 <- colMeans(L_base)
-  c2 <- colMeans(L_alt)
+  c1 <- aw_cvpat_col_means(L_base)
+  c2 <- aw_cvpat_col_means(L_alt)
   c3 <- c1 - c2
   m <- cbind(
     as.numeric(as.character(c1)),
