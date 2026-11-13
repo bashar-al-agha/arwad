@@ -2,6 +2,8 @@
 
 S3method(print,arwad_function)
 S3method(print,aw_pls_ci)
+export(aw_assess_cvpat)
+export(aw_assess_cvpat_compare)
 export(aw_boot_glm)
 export(aw_boot_ols)
 export(aw_boot_pls)
@@ -11,6 +13,7 @@ export(aw_explain)
 export(aw_glm_fit)
 export(aw_pls_ci)
 export(aw_predict_pls)
+export(aw_q2_predict)
 export(aw_source)
 export(aw_toolchain)
 importFrom(stats,

@@ -5,6 +5,12 @@ expect_same_prediction <- function(got, want, label, native = TRUE) {
   expect_identical(got$native, native, label = paste(label, "native"))
   expect_identical(class(got), class(want), label = paste(label, "class"))
   expect_true(identical(unclass(got)[names(want)], unclass(want), num.eq = FALSE), label = paste(label, "identical to predict_pls()"))
+  if (native) {
+    expect_type(got$q2_predict, "double")
+    expect_identical(aw_q2_predict(got), got$q2_predict, label = paste(label, "aw_q2_predict(got)"))
+  } else {
+    expect_null(got$q2_predict, label = paste(label, "q2_predict null when delegated"))
+  }
 }
 
 # aw_predict_pls() is native from seminr 2.6.0 on and passes every call to
@@ -269,4 +275,146 @@ test_that("aw_predict_pls() hands consistent PLS and interaction terms to seminr
   r <- aw_predict_both(ints[[1L]], 2L, technique = seminr::predict_DA, noFolds = 5L)
   expect_same_prediction(r$got, r$want, names(ints)[1L], native = FALSE)
   expect_true(r$same_rng)
+})
+
+# Reference Q2_predict from the fold partition drawn by sample(n): each held-
+# out case is benchmarked against the indicator means of its training fold,
+# averaged across repetitions as PLS_out_of_sample is.
+aw_ref_q2_predict <- function(model, pls_oos, seed, noFolds = NULL, reps = NULL) {
+  n <- nrow(model$data)
+  K <- if (is.null(noFolds)) n else as.integer(noFolds)
+  R <- if (is.null(reps)) 1L else as.integer(reps)
+  endo <- unique(model$smMatrix[, "target"])
+  mm <- model$mmMatrix[model$mmMatrix[, "construct"] %in% endo, , drop = FALSE]
+  yitems <- unname(unlist(lapply(endo, function(co) mm[mm[, "construct"] == co, "measurement"])))
+  Y <- as.matrix(model$data[, yitems, drop = FALSE])
+  set.seed(seed)
+  tps <- split(seq_len(n), cut(seq(1, n), breaks = K, labels = FALSE))
+  perms <- if (arwad:::aw_seminr_260()) lapply(seq_len(R), function(r) sample(n)) else rep(list(sample(n)), R)
+  ia_reps <- lapply(seq_len(R), function(r) {
+    perm <- perms[[r]]
+    ia <- matrix(0, n, length(yitems))
+    for (f in seq_len(K)) {
+      te <- perm[tps[[f]]]
+      tr <- perm[-tps[[f]]]
+      mu <- colMeans(Y[tr, , drop = FALSE])
+      ia[te, ] <- rep(mu, each = length(te))
+    }
+    ia
+  })
+  ia_oos <- apply(simplify2array(ia_reps), c(1L, 2L), mean)
+  P <- as.matrix(pls_oos)
+  stats::setNames(1 - colSums((Y - P)^2) / colSums((Y - ia_oos)^2), yitems)
+}
+
+test_that("aw_predict_pls() and aw_q2_predict() compute Q2_predict from training-fold means", {
+  skip_if_no_toolchain()
+  skip_if_not_installed("seminr")
+  skip_if_old_seminr()
+  fits <- aw_pls_fit_models()
+  ecsi <- fits[["mobi_ecsi_core"]]
+  for (cfg in list(list(seminr::predict_DA, 10L, NULL), list(seminr::predict_EA, 10L, 1L), list(seminr::predict_EA, 5L, 3L))) {
+    set.seed(77L)
+    pr <- aw_predict_pls(ecsi, technique = cfg[[1L]], noFolds = cfg[[2L]], reps = cfg[[3L]])
+    sw <- .Random.seed
+    want <- aw_ref_q2_predict(ecsi, pr$items$PLS_out_of_sample, 77L, noFolds = cfg[[2L]], reps = cfg[[3L]])
+    expect_identical(pr$q2_predict, want, label = paste("q2_predict reps", format(cfg[[3L]])))
+    # Extracting from a native predict_pls_model does not touch the RNG state.
+    set.seed(99L)
+    s0 <- .Random.seed
+    expect_identical(aw_q2_predict(pr), want)
+    expect_identical(.Random.seed, s0)
+    # Computing directly from a pls_model matches and advances the RNG state identically.
+    set.seed(77L)
+    q2 <- aw_q2_predict(ecsi, technique = cfg[[1L]], noFolds = cfg[[2L]], reps = cfg[[3L]])
+    expect_identical(q2, want)
+    expect_identical(.Random.seed, sw)
+  }
+  # Leave-one-out (noFolds = NULL).
+  comp <- Filter(function(m) !any(m$mmMatrix[, "type"] == "C"), fits)
+  small <- comp[[which.min(vapply(comp, function(m) nrow(m$data), 1L))]]
+  set.seed(19L)
+  pr_loo <- aw_predict_pls(small, technique = seminr::predict_DA, noFolds = NULL)
+  expect_identical(pr_loo$q2_predict, aw_ref_q2_predict(small, pr_loo$items$PLS_out_of_sample, 19L, noFolds = NULL))
+  # Single endogenous indicator (where items$PLS_out_of_sample drops to a vector).
+  mm1 <- seminr::constructs(seminr::composite("Image", seminr::multi_items("IMAG", 1:5)),
+                            seminr::composite("Satisfaction", seminr::single_item("CUSA1")))
+  m1 <- suppressMessages(seminr::estimate_pls(seminr::mobi, mm1, seminr::relationships(seminr::paths(from = "Image", to = "Satisfaction"))))
+  for (R in list(NULL, 2L)) {
+    set.seed(23L)
+    pr1 <- aw_predict_pls(m1, technique = seminr::predict_DA, noFolds = 5L, reps = R)
+    expect_identical(pr1$q2_predict, aw_ref_q2_predict(m1, pr1$items$PLS_out_of_sample, 23L, noFolds = 5L, reps = R))
+    expect_identical(names(pr1$q2_predict), "CUSA1")
+  }
+  # A foreign predict_pls_model (no training-fold means stored) errors clearly;
+  # passing a delegated pls_model directly to aw_q2_predict() computes Q2_predict via seminr folds.
+  set.seed(31L)
+  foreign <- suppressWarnings(suppressMessages(seminr::predict_pls(ecsi, noFolds = 5L)))
+  expect_error(aw_q2_predict(foreign), "training-fold indicator means")
+  expect_error(aw_q2_predict(list()), "pls_model")
+  ints <- aw_pls_fit_interaction_models()
+  set.seed(41L)
+  q2_int <- aw_q2_predict(ints[[1L]], technique = seminr::predict_DA, noFolds = 5L, reps = 2L)
+  set.seed(41L)
+  pr_int <- aw_predict_pls(ints[[1L]], technique = seminr::predict_DA, noFolds = 5L, reps = 2L)
+  expect_identical(q2_int, aw_ref_q2_predict(ints[[1L]], pr_int$items$PLS_out_of_sample, 41L, noFolds = 5L, reps = 2L))
+  # Higher-order construct models emit seminr's message and return NULL in aw_q2_predict().
+  mm_hoc <- seminr::constructs(
+    seminr::composite("Image", seminr::multi_items("IMAG", 1:3)),
+    seminr::composite("Value", seminr::multi_items("PERV", 1:2)),
+    seminr::higher_composite("Higher", c("Image", "Value"), method = seminr::two_stage),
+    seminr::composite("Satisfaction", seminr::multi_items("CUSA", 1:3))
+  )
+  sm_hoc <- seminr::relationships(seminr::paths(from = "Higher", to = "Satisfaction"))
+  m_hoc <- suppressMessages(seminr::estimate_pls(seminr::mobi, mm_hoc, sm_hoc))
+  expect_message(q2_hoc <- aw_q2_predict(m_hoc, noFolds = 5L), "higher-order")
+  expect_null(q2_hoc)
+})
+
+test_that("aw_q2_predict() matches seminr's fold draws across versions, including seminr 2.5.0 with reps > 1", {
+  skip_if_no_toolchain()
+  skip_if_not_installed("seminr")
+  mm <- seminr::constructs(
+    seminr::composite("Image", seminr::multi_items("IMAG", 1:5)),
+    seminr::composite("Value", seminr::multi_items("PERV", 1:2)),
+    seminr::composite("Satisfaction", seminr::multi_items("CUSA", 1:3))
+  )
+  sm <- seminr::relationships(
+    seminr::paths(from = "Image", to = c("Value", "Satisfaction")),
+    seminr::paths(from = "Value", to = "Satisfaction")
+  )
+  m <- suppressMessages(seminr::estimate_pls(seminr::mobi, mm, sm))
+  for (R in list(NULL, 1L, 2L)) {
+    set.seed(53L)
+    pr <- aw_predict_pls(m, technique = seminr::predict_DA, noFolds = 5L, reps = R)
+    sw <- .Random.seed
+    set.seed(53L)
+    q2 <- aw_q2_predict(m, technique = seminr::predict_DA, noFolds = 5L, reps = R)
+    expect_identical(.Random.seed, sw)
+    expect_identical(q2, aw_ref_q2_predict(m, pr$items$PLS_out_of_sample, 53L, noFolds = 5L, reps = R))
+  }
+})
+
+test_that("aw_q2_predict() redraws a delegated model's folds from the same state in a fresh session", {
+  skip_if_not_installed("seminr")
+  skip_if_old_seminr()
+  # Reflective constructs go to seminr::predict_pls(); aw_q2_predict() then
+  # draws the folds again for the training-fold means. Without a
+  # .Random.seed, both draws must come from one initialisation, not two.
+  m <- aw_pls_fit_models()[["mobi_ecsi_reflective"]]
+  n <- nrow(m$data)
+  keep <- get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  on.exit(if (!is.null(keep)) assign(".Random.seed", keep, envir = globalenv()), add = TRUE)
+  if (!is.null(keep)) rm(".Random.seed", envir = globalenv())
+  perms <- new.env()
+  perms$p <- list()
+  record <- function(v) perms$p[[length(perms$p) + 1L]] <- v
+  invisible(utils::capture.output(suppressMessages(
+    trace("sample", print = FALSE, where = asNamespace("arwad"),
+          exit = bquote(if (length(x) == 1L && x == .(n)) .(record)(returnValue()))))))
+  on.exit(suppressMessages(untrace("sample", where = asNamespace("arwad"))), add = TRUE)
+  q2 <- aw_q2_predict(m, noFolds = 5L)
+  expect_length(perms$p, 2L)
+  expect_identical(perms$p[[2L]], perms$p[[1L]], label = "redrawn folds")
+  expect_true(all(is.finite(q2)))
 })

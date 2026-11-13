@@ -1,3 +1,24 @@
+# arwad 0.1.0.9007
+
+* New `aw_assess_cvpat()` and `aw_assess_cvpat_compare()`: the
+  cross-validated predictive ability test (CVPAT; Liengaard et al., 2021;
+  Sharma et al., 2023), compiled replacements for
+  `seminrExtras::assess_cvpat()` and `seminrExtras::assess_cvpat_compare()`
+  with their arguments and defaults. The cross-validated predictions come from
+  the compiled PLSpredict of `aw_predict_pls()` and the bootstrap of the loss
+  differences runs as native code. The tables, `Boot T value` and
+  `Boot P Value` included, and the random-number state after the call are
+  identical to `seminrExtras` 1.0.4 on the models of composites in the test
+  set. As in `seminrExtras`, the indicator-average benchmark predicts with the
+  item means of the whole sample. `testtype = "less"`, on which
+  `seminrExtras` 1.0.4 fails, gives the lower-tail p-value. Models outside the
+  native subset go to `seminrExtras` when it is installed (ADR-0008, amendment
+  of 13 November 2026).
+* New `aw_q2_predict()`, and `q2_predict` in the result of `aw_predict_pls()`:
+  Q²predict of each predicted indicator, one minus the PLS model's sum of
+  squared out-of-sample errors over that of the training-fold item means
+  (Shmueli et al., 2016, 2019).
+
 # arwad 0.1.0.9006
 
 * New `aw_predict_pls()`: PLSpredict (k-fold cross-validated prediction), a

@@ -131,6 +131,55 @@ aw_pls_lm_sets <- function(spec, ea, sm) {
   })
 }
 
+# Validates a model and cross-validation arguments for native PLSpredict/CVPAT,
+# draws the R fold permutations from the caller's RNG stream, and estimates all
+# R * k training sets in batches by training-set size via aw_pls_run_cores().
+# Restores .Random.seed and returns NULL when any check or fold fails.
+aw_pls_cv_fits <- function(model, technique, noFolds, reps, cores, need_lm = TRUE) {
+  ea <- identical(technique, seminr::predict_EA)
+  whole <- function(v) is.numeric(v) && length(v) == 1L && is.finite(v) && v == round(v)
+  if (!aw_seminr_260() || !inherits(model, "pls_model") || isTRUE(model$hoc) ||
+      (!ea && !identical(technique, seminr::predict_DA))) return(NULL)
+  spec <- aw_pls_spec(model)
+  if (is.null(spec) || any(spec$mode >= 3L) || !is.null(spec$stage1) || any(spec$ix > 0L)) return(NULL)
+  n <- nrow(spec$X)
+  k <- if (is.null(noFolds)) n else noFolds
+  R <- if (is.null(reps)) 1L else reps
+  ord <- aw_pls_order(spec$pre)
+  if (!whole(k) || k < 2 || k > n || !whole(R) || R < 1 || is.null(ord)) return(NULL)
+  k <- as.integer(k)
+  R <- as.integer(R)
+  cores <- if (is.null(cores)) 1L else cores
+  if (!whole(cores) || cores < 1) return(NULL)
+  endo <- unique(model$smMatrix[, "target"])
+  itc <- lapply(endo, function(c) which(spec$blk == match(c, spec$cons)))
+  yi <- unlist(itc, use.names = FALSE)
+  sets <- if (need_lm) aw_pls_lm_sets(spec, ea, model$smMatrix)
+  had <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  if (had) old <- get(".Random.seed", envir = globalenv())
+  restore <- function() {
+    if (had) assign(".Random.seed", old, envir = globalenv())
+    else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) rm(".Random.seed", envir = globalenv())
+    NULL
+  }
+  perms <- lapply(seq_len(R), function(r) sample(n))
+  tps <- split(seq_len(n), cut(seq(1, n), breaks = k, labels = FALSE))
+  if (length(tps) != k) return(restore())
+  ntr <- n - lengths(tps)
+  fits <- vector("list", R * k)
+  for (sz in unique(ntr)) {
+    fs <- which(ntr == sz)
+    at <- as.vector(outer(fs, (seq_len(R) - 1L) * k, `+`))
+    idx <- matrix(0L, sz, length(at))
+    for (a in seq_along(at)) idx[, a] <- perms[[(at[a] - 1L) %/% k + 1L]][-tps[[(at[a] - 1L) %% k + 1L]]]
+    res <- aw_pls_run_cores(spec, idx, cores)
+    if (is.null(res) || any(res[, ncol(res)] != 0)) return(restore())
+    for (a in seq_along(at)) fits[[at[a]]] <- res[a, ]
+  }
+  list(spec = spec, ea = ea, ord = ord, n = n, k = k, R = R, endo = endo, itc = itc, yi = yi,
+       q = length(yi), sets = sets, perms = perms, tps = tps, fits = fits, restore = restore)
+}
+
 #' Cross-validated predictions of a PLS-SEM model, compiled
 #'
 #' A compiled replacement for `seminr::predict_pls()` (PLSpredict; Shmueli et
@@ -173,7 +222,8 @@ aw_pls_lm_sets <- function(spec, ea, sm) {
 #'   `NULL` for one.
 #' @return An object of class `predict_pls_model`, laid out as
 #'   `seminr::predict_pls()` returns it; `native` is `FALSE` when seminr
-#'   produced it.
+#'   produced it, and `q2_predict` holds the cross-validated \eqn{Q^2_{\text{predict}}}
+#'   of each predicted indicator when `native` is `TRUE` (see [aw_q2_predict()]).
 #' @export
 #' @examplesIf requireNamespace("seminr", quietly = TRUE)
 #' library(seminr)
@@ -186,64 +236,41 @@ aw_pls_lm_sets <- function(spec, ea, sm) {
 #' set.seed(123)
 #' pred <- aw_predict_pls(model, technique = predict_EA, noFolds = 10, reps = 10)
 #' summary(pred)
+#' pred$q2_predict
 aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL, reps = NULL, cores = NULL) {
   if (!requireNamespace("seminr", quietly = TRUE)) stop("aw_predict_pls() needs the seminr package")
   delegate <- function() {
     out <- seminr::predict_pls(model, technique = technique, noFolds = noFolds, reps = reps, cores = cores)
+    # seminr returns NULL for models it does not predict (higher-order models).
+    if (is.null(out)) return(out)
     out$native <- FALSE
     out
   }
-  ea <- identical(technique, seminr::predict_EA)
-  whole <- function(v) is.numeric(v) && length(v) == 1L && is.finite(v) && v == round(v)
-  # The rules above are seminr 2.6.0's; earlier versions are left to seminr.
-  if (!aw_seminr_260() || !inherits(model, "pls_model") || (!ea && !identical(technique, seminr::predict_DA))) return(delegate())
-  spec <- aw_pls_spec(model)
-  # Consistent PLS and interaction terms are left to seminr.
-  if (is.null(spec) || any(spec$mode >= 3L) || !is.null(spec$stage1) || any(spec$ix > 0L)) return(delegate())
-  n <- nrow(spec$X)
-  k <- if (is.null(noFolds)) n else noFolds
-  R <- if (is.null(reps)) 1L else reps
-  ord <- aw_pls_order(spec$pre)
-  if (!whole(k) || k < 2 || k > n || !whole(R) || R < 1 || is.null(ord)) return(delegate())
-  k <- as.integer(k)
-  R <- as.integer(R)
-  cores <- if (is.null(cores)) 1L else cores
-  X <- spec$X
-  p <- ncol(X)
-  J <- length(spec$cons)
-  # The predicted indicators: those of each endogenous construct, the
-  # constructs in their order as targets in the structural model.
-  yi <- unlist(lapply(match(unique(model$smMatrix[, "target"]), spec$cons), function(j) which(spec$blk == j)))
-  q <- length(yi)
-  sets <- aw_pls_lm_sets(spec, ea, model$smMatrix)
-  # The folds, from the caller's random-number stream; restored when the
-  # work goes to seminr, which then draws the same folds.
-  had <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-  if (had) old <- get(".Random.seed", envir = globalenv())
+  cv <- aw_pls_cv_fits(model, technique, noFolds, reps, cores, need_lm = TRUE)
+  if (is.null(cv)) return(delegate())
+  spec <- cv$spec
+  ea <- cv$ea
+  ord <- cv$ord
+  n <- cv$n
+  k <- cv$k
+  R <- cv$R
+  yi <- cv$yi
+  q <- cv$q
+  sets <- cv$sets
+  perms <- cv$perms
+  tps <- cv$tps
+  fits <- cv$fits
   back <- function() {
-    if (had) assign(".Random.seed", old, envir = globalenv()) else rm(".Random.seed", envir = globalenv())
+    cv$restore()
     delegate()
   }
-  perms <- lapply(seq_len(R), function(r) sample(n))
-  tps <- split(seq_len(n), cut(seq(1, n), breaks = k, labels = FALSE))
-  if (length(tps) != k) return(back())
-  # Every training set, estimated by the compiled kernel: one call per
-  # training-set size (folds differ by one case at most).
-  ntr <- n - lengths(tps)
-  fits <- vector("list", R * k)
-  for (sz in unique(ntr)) {
-    fs <- which(ntr == sz)
-    at <- as.vector(outer(fs, (seq_len(R) - 1L) * k, `+`))
-    idx <- matrix(0L, sz, length(at))
-    for (a in seq_along(at)) idx[, a] <- perms[[(at[a] - 1L) %/% k + 1L]][-tps[[(at[a] - 1L) %% k + 1L]]]
-    res <- aw_pls_run_cores(spec, idx, cores)
-    if (is.null(res) || any(res[, ncol(res)] != 0)) return(back())
-    for (a in seq_along(at)) fits[[at[a]]] <- res[a, ]
-  }
+  X <- spec$X
+  J <- length(spec$cons)
   reps_out <- vector("list", R)
   for (r in seq_len(R)) {
     oos <- matrix(NA_real_, n, q)
     oos_lm <- oos
+    oos_ia <- oos
     oos_sc <- matrix(NA_real_, n, J)
     ins <- array(NA_real_, c(n, q, k))
     ins_lm <- ins
@@ -260,6 +287,7 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
       pin <- aw_pls_fold_predict(o, spec, Xtr, mu, s, ea, ord)
       pout <- aw_pls_fold_predict(o, spec, Xte, mu, s, ea, ord)
       oos[te, ] <- pout$items[, yi]
+      oos_ia[te, ] <- rep(mu[yi], each = length(te))
       oos_sc[te, ] <- pout$scores
       ins[tr, , f] <- pin$items[, yi]
       ins_sc[tr, , f] <- pin$scores
@@ -277,7 +305,7 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
       }
     }
     reps_out[[r]] <- list(oos = oos, ins = rowSums(ins, dims = 2L, na.rm = TRUE) / (k - 1L), oos_lm = oos_lm,
-                          ins_lm = rowSums(ins_lm, dims = 2L, na.rm = TRUE) / (k - 1L), oos_sc = oos_sc,
+                          ins_lm = rowSums(ins_lm, dims = 2L, na.rm = TRUE) / (k - 1L), oos_ia = oos_ia, oos_sc = oos_sc,
                           ins_sc = rowSums(ins_sc, dims = 2L, na.rm = TRUE) / (k - 1L))
   }
   avg <- function(el) aw_pls_rep_mean(lapply(reps_out, `[[`, el))
@@ -294,6 +322,9 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
   pls_ins <- named(avg("ins"))
   lm_oos <- named(avg("oos_lm"))
   lm_ins <- named(avg("ins_lm"))
+  ia_oos <- avg("oos_ia")
+  Xyi <- X[, yi, drop = FALSE]
+  q2_predict <- stats::setNames(1 - colSums((Xyi - pls_oos)^2) / colSums((Xyi - ia_oos)^2), items)
   last <- reps_out[[R]]
   cs <- function(m) {
     dimnames(m) <- dimnames(model$construct_scores)
@@ -321,5 +352,110 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
               model = model)
   class(out) <- "predict_pls_model"
   out$native <- TRUE
+  out$q2_predict <- q2_predict
   out
+}
+
+#' Cross-validated \eqn{Q^2_{\text{predict}}} for PLSpredict
+#'
+#' Computes \eqn{Q^2_{\text{predict}}} for each predicted endogenous indicator
+#' as defined by Shmueli et al. (2016, 2019) and Hair, Hult, Ringle and
+#' Sarstedt (2022, pp. 201-209):
+#' \deqn{Q^2_{\text{predict}} = 1 - \frac{\sum_i (y_i - \hat{y}_{i,\text{PLS}})^2}{\sum_i (y_i - \bar{y}_{i,\text{train}})^2}}
+#' where \eqn{\hat{y}_{i,\text{PLS}}} is the out-of-sample PLS prediction
+#' (averaged across repetitions when `reps > 1`) and \eqn{\bar{y}_{i,\text{train}}}
+#' is the indicator's mean in the training fold that held case \eqn{i} out
+#' (averaged across repetitions in the same way).
+#'
+#' When `x` is a native prediction object returned by [aw_predict_pls()], its
+#' pre-computed `q2_predict` vector is returned directly. When `x` is a model
+#' returned by `seminr::estimate_pls()`, cross-validated predictions are run
+#' and \eqn{Q^2_{\text{predict}}} is returned.
+#'
+#' @param x A `predict_pls_model` returned by [aw_predict_pls()], or a model
+#'   returned by `seminr::estimate_pls()`.
+#' @param technique `seminr::predict_DA` (direct antecedents, the default) or
+#'   `seminr::predict_EA` (earliest antecedents), used when `x` is a model.
+#' @param noFolds The number of folds (`NULL` for leave-one-out), used when
+#'   `x` is a model.
+#' @param reps The number of repetitions (`NULL` for one), used when `x` is a
+#'   model.
+#' @param cores The number of worker processes (`NULL` for one), used when `x`
+#'   is a model.
+#' @return A named numeric vector of \eqn{Q^2_{\text{predict}}} values, one per
+#'   predicted endogenous indicator; `NULL` for a higher-order model, which
+#'   `seminr::predict_pls()` does not predict.
+#' @references
+#' Hair, J. F., Hult, G. T. M., Ringle, C. M., & Sarstedt, M. (2022). *A primer
+#' on partial least squares structural equation modeling (PLS-SEM)* (3rd ed.).
+#' SAGE.
+#'
+#' Shmueli, G., Ray, S., Velasquez Estrada, J. M., & Chatla, S. B. (2016). The
+#' elephant in the room: Predictive performance of PLS models. *Journal of
+#' Business Research, 69*(10), 4552-4564.
+#'
+#' Shmueli, G., Sarstedt, M., Hair, J. F., Cheah, J.-H., Ting, H., Vaithilingam,
+#' S., & Ringle, C. M. (2019). Predictive model assessment in PLS-SEM:
+#' Guidelines for using PLSpredict. *European Journal of Marketing, 53*(11),
+#' 2322-2347.
+#' @export
+#' @examplesIf requireNamespace("seminr", quietly = TRUE)
+#' library(seminr)
+#' mm <- constructs(composite("Image", multi_items("IMAG", 1:5)),
+#'                  composite("Value", multi_items("PERV", 1:2)),
+#'                  composite("Satisfaction", multi_items("CUSA", 1:3)))
+#' sm <- relationships(paths(from = "Image", to = c("Value", "Satisfaction")),
+#'                     paths(from = "Value", to = "Satisfaction"))
+#' model <- estimate_pls(mobi, mm, sm)
+#' set.seed(123)
+#' aw_q2_predict(model, technique = predict_EA, noFolds = 10, reps = 10)
+aw_q2_predict <- function(x, technique = seminr::predict_DA, noFolds = NULL, reps = NULL, cores = NULL) {
+  if (inherits(x, "predict_pls_model")) {
+    if (!is.null(x$q2_predict)) return(x$q2_predict)
+    stop("this 'predict_pls_model' does not carry training-fold indicator means (it was produced by seminr::predict_pls() or delegated to it); pass the 'pls_model' to aw_q2_predict() directly",
+         call. = FALSE)
+  }
+  if (!inherits(x, "pls_model")) {
+    stop("'x' must be a 'predict_pls_model' from aw_predict_pls() or a 'pls_model' from seminr::estimate_pls()",
+         call. = FALSE)
+  }
+  # The state the folds are drawn from, kept so that a delegated prediction's
+  # folds can be drawn again below. A session without one is initialised
+  # here, as its first draw would do; otherwise seminr's draw and the redraw
+  # would each initialise it from a different clock time.
+  if (!exists(".Random.seed", envir = globalenv(), inherits = FALSE)) set.seed(NULL)
+  old <- get(".Random.seed", envir = globalenv())
+  pred <- aw_predict_pls(x, technique = technique, noFolds = noFolds, reps = reps, cores = cores)
+  if (is.null(pred) || is.null(pred$items)) return(NULL)
+  if (!is.null(pred$q2_predict)) return(pred$q2_predict)
+  # When aw_predict_pls() delegated to seminr::predict_pls() (e.g. consistent
+  # PLS or interaction terms under seminr >= 2.6.0, or any model under seminr
+  # < 2.6.0), reconstruct the same folds from the starting seed to obtain the
+  # training-fold indicator means, then restore the post-prediction .Random.seed.
+  after <- get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  on.exit(if (is.null(after)) rm(".Random.seed", envir = globalenv()) else assign(".Random.seed", after, envir = globalenv()),
+          add = TRUE)
+  assign(".Random.seed", old, envir = globalenv())
+  endo <- unique(x$smMatrix[, "target"])
+  items <- unlist(lapply(endo, function(c) x$mmMatrix[x$mmMatrix[, "construct"] == c, "measurement"]), use.names = FALSE)
+  Xyi <- as.matrix(x$data[, items, drop = FALSE])
+  n <- nrow(Xyi)
+  q <- ncol(Xyi)
+  k <- if (is.null(noFolds)) n else as.integer(noFolds)
+  R <- if (is.null(reps)) 1L else as.integer(reps)
+  perms <- if (aw_seminr_260()) lapply(seq_len(R), function(r) sample(n)) else rep(list(sample(n)), R)
+  tps <- split(seq_len(n), cut(seq(1, n), breaks = k, labels = FALSE))
+  ia_reps <- lapply(seq_len(R), function(r) {
+    oos_ia <- matrix(NA_real_, n, q)
+    for (f in seq_len(k)) {
+      te <- perms[[r]][tps[[f]]]
+      tr <- perms[[r]][-tps[[f]]]
+      # The training means, as scale() centres (colMeans()).
+      oos_ia[te, ] <- rep(colMeans(Xyi[tr, , drop = FALSE]), each = length(te))
+    }
+    oos_ia
+  })
+  ia_oos <- aw_pls_rep_mean(ia_reps)
+  res_pls <- as.matrix(pred$items$PLS_out_of_sample_residuals)
+  stats::setNames(1 - colSums(res_pls^2) / colSums((Xyi - ia_oos)^2), items)
 }

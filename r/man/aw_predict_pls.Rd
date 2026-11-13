@@ -30,7 +30,8 @@ for one.}
 \value{
 An object of class \code{predict_pls_model}, laid out as
 \code{seminr::predict_pls()} returns it; \code{native} is \code{FALSE} when seminr
-produced it.
+produced it, and \code{q2_predict} holds the cross-validated \eqn{Q^2_{\text{predict}}}
+of each predicted indicator when \code{native} is \code{TRUE} (see \code{\link[=aw_q2_predict]{aw_q2_predict()}}).
 }
 \description{
 A compiled replacement for \code{seminr::predict_pls()} (PLSpredict; Shmueli et
@@ -75,5 +76,6 @@ model <- estimate_pls(mobi, mm, sm)
 set.seed(123)
 pred <- aw_predict_pls(model, technique = predict_EA, noFolds = 10, reps = 10)
 summary(pred)
+pred$q2_predict
 \dontshow{\}) # examplesIf}
 }

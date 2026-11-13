@@ -1,7 +1,7 @@
 Package: arwad
 Type: Package
 Title: Compile Loop-Heavy R Functions to Native Code Through 'Goose'
-Version: 0.1.0.9006
+Version: 0.1.0.9007
 Authors@R:
     person("Bashar", "Al Agha", email = "ba8160@srmist.edu.in",
            role = c("aut", "cre"),
@@ -26,6 +26,7 @@ Imports:
 Suggests:
     boot,
     seminr,
+    seminrExtras,
     testthat (>= 3.0.0)
 SystemRequirements: Goose (>= 2026.3) <https://github.com/aardappel/goose>
     for compilation, and the C compiler R uses for packages (Rtools on
