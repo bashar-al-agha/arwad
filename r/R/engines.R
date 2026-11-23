@@ -82,7 +82,9 @@ aw_boot_ols <- function(X, y, B = 1000L) {
 # are the first-stage constructs whose scores the m-th term multiplies.
 # wonly = 1 (the first-stage run) returns the weights alone, one row per
 # sample, and skips the rest of the estimation, which the second stage
-# does not use.
+# does not use. wonly = 2 (the PLSpredict/CVPAT fold run) returns the
+# weights, loadings, path coefficients and status (width p + pJ + JJ + 1)
+# and skips total effects and HTMT, which prediction does not use.
 aw_pls_kernel <- function(X, blk, pos, nb, mode, pre, maxIt, crit, idx, ix, xj, k1, c1, iv1, md1, W1, wonly) {
   # The sample size is the number of rows of idx: n for a bootstrap
   # resample, n - 1 for a leave-one-out (jackknife) sample.
@@ -94,6 +96,7 @@ aw_pls_kernel <- function(X, blk, pos, nb, mode, pre, maxIt, crit, idx, ix, xj, 
   pJ <- p * J
   width <- p + pJ + 3L * JJ + 3L
   if (wonly == 1L) width <- p
+  if (wonly == 2L) width <- p + pJ + JJ + 1L
   out <- matrix(0, R, width)
   Xb <- matrix(0, n, p)
   Z <- matrix(0, n, p)
@@ -363,6 +366,21 @@ aw_pls_kernel <- function(X, blk, pos, nb, mode, pre, maxIt, crit, idx, ix, xj, 
         }
       }
     }
+    for (k in seq_len(p)) out[r, k] <- W[k, blk[k]]
+    # Loadings: covariances with the scores; for a reflective construct the
+    # consistent loadings sqrt(rho_A) / (w'w) * w (rho_A = 1 for one indicator).
+    # (A sample with status 1 is left out, so its loadings are not needed.)
+    L <- cov(Z, Y)
+    for (j in seq_len(J)) for (k in seq_len(p)) {
+      out[r, p + (j - 1L) * p + k] <- if (blk[k] != j) L[k, j] * 0 else if (mode[j] != 3L) L[k, j] else if (bad == 0L) sqrt(rho[j]) / wwv[j] * W[k, j] else 0
+    }
+    for (j in seq_len(J)) for (i in seq_len(J)) {
+      out[r, p + pJ + (j - 1L) * J + i] <- Bm[i, j]
+    }
+    if (wonly == 2L) {
+      out[r, p + pJ + JJ + 1L] <- if (bad == 1L) 1 else if (adm == 0L) 2 else 0
+      next
+    }
     Tm <- Bm
     Pw <- Bm
     if (J > 1L) for (m in 2:J) {
@@ -387,17 +405,8 @@ aw_pls_kernel <- function(X, blk, pos, nb, mode, pre, maxIt, crit, idx, ix, xj, 
         H[i, j] <- mean(hv) / sqrt(mono[i] * mono[j])
       }
     }
-    for (k in seq_len(p)) out[r, k] <- W[k, blk[k]]
-    # Loadings: covariances with the scores; for a reflective construct the
-    # consistent loadings sqrt(rho_A) / (w'w) * w (rho_A = 1 for one indicator).
-    # (A sample with status 1 is left out, so its loadings are not needed.)
-    L <- cov(Z, Y)
-    for (j in seq_len(J)) for (k in seq_len(p)) {
-      out[r, p + (j - 1L) * p + k] <- if (blk[k] != j) L[k, j] * 0 else if (mode[j] != 3L) L[k, j] else if (bad == 0L) sqrt(rho[j]) / wwv[j] * W[k, j] else 0
-    }
     for (j in seq_len(J)) for (i in seq_len(J)) {
       q <- (j - 1L) * J + i
-      out[r, p + pJ + q] <- Bm[i, j]
       out[r, p + pJ + JJ + q] <- Tm[i, j]
       out[r, p + pJ + 2L * JJ + q] <- H[i, j]
     }

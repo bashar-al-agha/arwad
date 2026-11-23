@@ -413,11 +413,159 @@ test_that("aw_q2_predict() redraws a delegated model's folds from the same state
     trace("sample", print = FALSE, where = asNamespace("arwad"),
           exit = bquote(if (length(x) == 1L && x == .(n)) .(record)(returnValue()))))))
   on.exit(suppressMessages(untrace("sample", where = asNamespace("arwad"))), add = TRUE)
-  # The folds are random here, and seminr 2.6.0 gives NA rows for a fold
-  # whose consistent-PLS solution is inadmissible, so Q2 itself may be NA;
-  # the test is about the folds.
+  # The folds are random here; if a consistent-PLS fold is inadmissible under
+  # seminr 2.6.0, aw_q2_predict() warns and omits those cases (returning NA
+  # only if all folds are inadmissible). The test is about the redrawn folds.
   q2 <- suppressWarnings(aw_q2_predict(m, noFolds = 5L))
   expect_length(perms$p, 2L)
   expect_identical(perms$p[[2L]], perms$p[[1L]], label = "redrawn folds")
   expect_true(is.double(q2) && !is.null(names(q2)))
+})
+
+test_that("aw_pls_kernel() fold-only mode (wonly = 2L) matches full mode bit for bit across all composite models", {
+  skip_if_no_toolchain()
+  skip_if_not_installed("seminr")
+  skip_if_old_seminr()
+  fits <- aw_pls_fit_models()
+  comp <- Filter(function(m) !any(m$mmMatrix[, "type"] == "C"), fits)
+  expect_gte(length(comp), 50L)
+  u <- arwad:::aw_pls_unit()
+  for (k in seq_along(comp)) {
+    nm <- names(comp)[k]
+    spec0 <- arwad:::aw_pls_spec(comp[[nm]])
+    spec2 <- spec0
+    spec2$wonly <- 2L
+    n <- nrow(spec0$X)
+    # Two fold-sized training sets (or one when k is divisible by 10 to test ncol(idx) == 1L).
+    nf <- if (k %% 10L == 0L) 1L else 2L
+    m <- n - max(1L, n %/% 5L)
+    idx <- matrix(0L, m, nf)
+    for (j in seq_len(nf)) idx[, j] <- seq_len(n)[-seq.int((j - 1L) * (n - m) + 1L, j * (n - m))]
+    r0 <- arwad:::aw_pls_call(u, spec0, idx)
+    r2 <- arwad:::aw_pls_call(u, spec2, idx)
+    p <- length(spec0$items)
+    J <- length(spec0$cons)
+    keep <- p + p * J + J * J
+    expect_identical(ncol(r2), keep + 1L, label = paste(nm, "fold-mode width"))
+    expect_true(identical(r2[, seq_len(keep), drop = FALSE], r0[, seq_len(keep), drop = FALSE], num.eq = FALSE),
+                label = paste(nm, "fold-mode weights/loadings/paths bit-identical"))
+    expect_true(identical(r2[, ncol(r2)], r0[, ncol(r0)], num.eq = FALSE),
+                label = paste(nm, "fold-mode status"))
+  }
+  # Multi-core fold mode matches single-core fold mode, and BCa jackknife stays on full mode (wonly = 0L).
+  ecsi <- comp[["mobi_ecsi_core"]]
+  spec_e <- arwad:::aw_pls_spec(ecsi)
+  spec_e2 <- spec_e
+  spec_e2$wonly <- 2L
+  n <- nrow(spec_e$X)
+  idx4 <- matrix(0L, n - 50L, 4L)
+  for (j in seq_len(4L)) idx4[, j] <- seq_len(n)[-seq.int((j - 1L) * 50L + 1L, j * 50L)]
+  # (The workers load the installed arwad: an installation older than
+  # 0.1.0.9008 ignores wonly = 2L and returns the full width, so this needs a
+  # current installation, as R CMD check and the CI provide.)
+  expect_true(identical(arwad:::aw_pls_run_cores(spec_e2, idx4, 2L),
+                        arwad:::aw_pls_run_cores(spec_e2, idx4, 1L), num.eq = FALSE))
+  jk <- arwad:::aw_pls_jack(spec_e)
+  p <- length(spec_e$items)
+  J <- length(spec_e$cons)
+  expect_identical(ncol(jk), p + p * J + 3L * J * J + 3L)
+  utils::capture.output(info <- aw_explain(u))
+  expect_identical(sum(info$bailouts), 0L)
+})
+
+test_that("aw_q2_predict() skips NA prediction rows with a matched mask and warns naming omitted cases", {
+  # Direct unit checks on aw_q2_compute() (version-independent).
+  res_pls <- matrix(c(1, -2, 3, -1, 0.5, -0.5, 2, 1, -1, 0.5, -0.5, 1.5), 6L, 2L,
+                    dimnames = list(paste0("id_", 1:6), c("y1", "y2")))
+  res_ia <- matrix(c(2, -3, 4, -2, 1.5, -1.5, 3, 2, -2, 1.5, -1.5, 2.5), 6L, 2L,
+                   dimnames = list(paste0("id_", 1:6), c("y1", "y2")))
+  expect_no_warning(q_full <- arwad:::aw_q2_compute(res_pls, res_ia, c("y1", "y2")))
+  expect_identical(q_full, stats::setNames(1 - colSums(res_pls^2) / colSums(res_ia^2), c("y1", "y2")))
+
+  # Single omitted case: matched mask on both numerator and denominator, rownames named in warning.
+  rp1 <- res_pls
+  rp1[3L, ] <- NA_real_
+  expect_warning(q1 <- arwad:::aw_q2_compute(rp1, res_ia, c("y1", "y2")),
+                 "omitted 1 of 6 cases with NA predictions \\(case id_3\\)")
+  ok1 <- c(1L, 2L, 4L, 5L, 6L)
+  want1 <- stats::setNames(1 - colSums(rp1[ok1, , drop = FALSE]^2) / colSums(res_ia[ok1, , drop = FALSE]^2), c("y1", "y2"))
+  biased1 <- stats::setNames(1 - colSums(rp1^2, na.rm = TRUE) / colSums(res_ia^2), c("y1", "y2"))
+  expect_identical(q1, want1)
+  expect_false(isTRUE(all.equal(q1, biased1)))
+
+  # Indicator-specific NA pattern + all-NA indicator -> NA_real_.
+  rp_uneven <- res_pls
+  rp_uneven[c(2L, 5L), 1L] <- NA_real_
+  rp_uneven[, 2L] <- NA_real_
+  expect_warning(q_un <- arwad:::aw_q2_compute(rp_uneven, res_ia, c("y1", "y2")),
+                 "per indicator: y1 \\(2\\), y2 \\(6\\)")
+  ok_y1 <- c(1L, 3L, 4L, 6L)
+  expect_identical(q_un[["y1"]], 1 - sum(rp_uneven[ok_y1, 1L]^2) / sum(res_ia[ok_y1, 1L]^2))
+  expect_true(is.na(q_un[["y2"]]))
+
+  # Equal NA counts on different cases: no one set of complete cases applies
+  # to every indicator, so the warning reports them per indicator.
+  rp_disj <- res_pls
+  rp_disj[1L, 1L] <- NA_real_
+  rp_disj[2L, 2L] <- NA_real_
+  expect_warning(q_disj <- arwad:::aw_q2_compute(rp_disj, res_ia, c("y1", "y2")),
+                 "omitted 2 of 6 cases with NA predictions \\(cases id_1, id_2; per indicator: y1 \\(1\\), y2 \\(1\\)\\)")
+  expect_identical(q_disj[["y1"]], 1 - sum(rp_disj[-1L, 1L]^2) / sum(res_ia[-1L, 1L]^2))
+  expect_identical(q_disj[["y2"]], 1 - sum(rp_disj[-2L, 2L]^2) / sum(res_ia[-2L, 2L]^2))
+
+  # More than 10 omitted cases truncates the listed case labels with '...'.
+  rp_many <- matrix(1, 20L, 1L)
+  ra_many <- matrix(2, 20L, 1L)
+  rp_many[1:12, 1L] <- NA_real_
+  expect_warning(q_many <- arwad:::aw_q2_compute(rp_many, ra_many, "y1"),
+                 "omitted 12 of 20 cases with NA predictions \\(cases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, \\.\\.\\.\\)")
+  expect_identical(q_many, c(y1 = 0.75))
+
+  # End-to-end delegated consistent-PLS model with an inadmissible fold under seminr >= 2.6.0.
+  skip_if_not_installed("seminr")
+  skip_if_old_seminr()
+  refl <- aw_pls_fit_models()[["mobi_ecsi_reflective"]]
+  found_seed <- NA_integer_
+  for (sd in seq_len(30L)) {
+    set.seed(sd)
+    pr_probe <- suppressWarnings(suppressMessages(seminr::predict_pls(refl, noFolds = 5L)))
+    na_rows <- rowSums(is.na(pr_probe$items$PLS_out_of_sample_residuals)) > 0L
+    if (any(na_rows) && !all(na_rows)) {
+      found_seed <- sd
+      break
+    }
+  }
+  expect_false(is.na(found_seed))
+  set.seed(found_seed)
+  pr_ref <- suppressWarnings(suppressMessages(seminr::predict_pls(refl, noFolds = 5L)))
+  sw_ref <- .Random.seed
+  set.seed(found_seed)
+  w <- testthat::capture_warnings(q_refl <- suppressMessages(aw_q2_predict(refl, noFolds = 5L)))
+  expect_identical(.Random.seed, sw_ref, label = "random-number state after aw_q2_predict() of a delegated model")
+  expect_true(any(grepl("aw_q2_predict\\(\\) omitted [0-9]+ of [0-9]+ cases with NA predictions", w)))
+  expect_true(all(is.finite(q_refl)))
+  # Verify bit-identity against an explicit matched-mask reference using the same folds.
+  endo <- unique(refl$smMatrix[, "target"])
+  items <- unlist(lapply(endo, function(c) refl$mmMatrix[refl$mmMatrix[, "construct"] == c, "measurement"]), use.names = FALSE)
+  Xyi <- as.matrix(refl$data[, items, drop = FALSE])
+  n <- nrow(Xyi)
+  set.seed(found_seed)
+  perm <- sample(n)
+  tps <- split(seq_len(n), cut(seq(1, n), breaks = 5L, labels = FALSE))
+  ia_oos <- matrix(NA_real_, n, length(items))
+  for (f in seq_len(5L)) {
+    te <- perm[tps[[f]]]
+    tr <- perm[-tps[[f]]]
+    ia_oos[te, ] <- rep(colMeans(Xyi[tr, , drop = FALSE]), each = length(te))
+  }
+  res_p <- as.matrix(pr_ref$items$PLS_out_of_sample_residuals)[, items, drop = FALSE]
+  res_i <- Xyi - ia_oos
+  want_refl <- vapply(seq_along(items), function(j) {
+    ok <- !is.na(res_p[, j])
+    1 - sum(res_p[ok, j]^2) / sum(res_i[ok, j]^2)
+  }, numeric(1L))
+  names(want_refl) <- items
+  biased_refl <- stats::setNames(1 - colSums(res_p^2, na.rm = TRUE) / colSums(res_i^2), items)
+  expect_identical(q_refl, want_refl)
+  expect_false(isTRUE(all.equal(q_refl, biased_refl)))
 })

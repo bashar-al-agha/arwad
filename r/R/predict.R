@@ -142,6 +142,7 @@ aw_pls_cv_fits <- function(model, technique, noFolds, reps, cores, need_lm = TRU
       (!ea && !identical(technique, seminr::predict_DA))) return(NULL)
   spec <- aw_pls_spec(model)
   if (is.null(spec) || any(spec$mode >= 3L) || !is.null(spec$stage1) || any(spec$ix > 0L)) return(NULL)
+  spec$wonly <- 2L
   n <- nrow(spec$X)
   k <- if (is.null(noFolds)) n else noFolds
   R <- if (is.null(reps)) 1L else reps
@@ -324,7 +325,7 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
   lm_ins <- named(avg("ins_lm"))
   ia_oos <- avg("oos_ia")
   Xyi <- X[, yi, drop = FALSE]
-  q2_predict <- stats::setNames(1 - colSums((Xyi - pls_oos)^2) / colSums((Xyi - ia_oos)^2), items)
+  q2_predict <- aw_q2_compute(Xyi - pls_oos, Xyi - ia_oos, items)
   last <- reps_out[[R]]
   cs <- function(m) {
     dimnames(m) <- dimnames(model$construct_scores)
@@ -356,6 +357,45 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
   out
 }
 
+# Computes indicator-level Q2_predict from n x q out-of-sample PLS and IA
+# residual matrices. When NA predictions appear (e.g. inadmissible consistent-PLS
+# folds under seminr >= 2.6.0), skips the NA cases using the exact same
+# complete-case mask on both numerator and denominator so the benchmark is
+# never summed over more cases than the PLS model, and warns naming the omitted
+# cases.
+aw_q2_compute <- function(res_pls, res_ia, items) {
+  if (!anyNA(res_pls) && !anyNA(res_ia)) {
+    return(stats::setNames(1 - colSums(res_pls^2) / colSums(res_ia^2), items))
+  }
+  n <- nrow(res_pls)
+  q <- ncol(res_pls)
+  ok_mat <- !is.na(res_pls) & !is.na(res_ia)
+  q2 <- numeric(q)
+  for (j in seq_len(q)) {
+    ok <- ok_mat[, j]
+    q2[j] <- if (any(ok)) 1 - sum(res_pls[ok, j]^2) / sum(res_ia[ok, j]^2) else NA_real_
+  }
+  omitted <- which(rowSums(!ok_mat) > 0L)
+  m <- length(omitted)
+  case_ids <- rownames(res_pls)
+  labels <- if (!is.null(case_ids) && length(case_ids) == n) case_ids[omitted] else as.character(omitted)
+  shown <- if (m <= 10L) paste(labels, collapse = ", ") else paste0(paste(labels[seq_len(10L)], collapse = ", "), ", ...")
+  case_word <- if (m == 1L) "case" else "cases"
+  n_miss <- colSums(!ok_mat)
+  # One count of remaining cases applies only when every indicator misses the
+  # same cases (each misses m of them); otherwise report per indicator.
+  detail <- if (length(unique(n_miss)) == 1L && n_miss[1L] == m) {
+    sprintf("aw_q2_predict() omitted %d of %d cases with NA predictions (%s %s); Q2_predict is computed on the remaining %d complete cases.",
+            m, n, case_word, shown, n - m)
+  } else {
+    per_item <- paste(sprintf("%s (%d)", items[n_miss > 0L], n_miss[n_miss > 0L]), collapse = ", ")
+    sprintf("aw_q2_predict() omitted %d of %d cases with NA predictions (%s %s; per indicator: %s); Q2_predict is computed on matched complete cases.",
+            m, n, case_word, shown, per_item)
+  }
+  warning(detail, call. = FALSE)
+  stats::setNames(q2, items)
+}
+
 #' Cross-validated \eqn{Q^2_{\text{predict}}} for PLSpredict
 #'
 #' Computes \eqn{Q^2_{\text{predict}}} for each predicted endogenous indicator
@@ -370,7 +410,11 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
 #' When `x` is a native prediction object returned by [aw_predict_pls()], its
 #' pre-computed `q2_predict` vector is returned directly. When `x` is a model
 #' returned by `seminr::estimate_pls()`, cross-validated predictions are run
-#' and \eqn{Q^2_{\text{predict}}} is returned.
+#' and \eqn{Q^2_{\text{predict}}} is returned. If any held-out cases carry `NA`
+#' predictions (for example, an inadmissible consistent-PLS fold under
+#' `seminr` 2.6.0 or later), those cases are omitted from both the numerator
+#' and the denominator using the same matched complete-case mask and a warning
+#' names the omitted cases.
 #'
 #' @param x A `predict_pls_model` returned by [aw_predict_pls()], or a model
 #'   returned by `seminr::estimate_pls()`.
@@ -383,7 +427,8 @@ aw_predict_pls <- function(model, technique = seminr::predict_DA, noFolds = NULL
 #' @param cores The number of worker processes (`NULL` for one), used when `x`
 #'   is a model.
 #' @return A named numeric vector of \eqn{Q^2_{\text{predict}}} values, one per
-#'   predicted endogenous indicator; `NULL` for a higher-order model, which
+#'   predicted endogenous indicator (`NA_real_` for an indicator if all held-out
+#'   cases are `NA`); `NULL` for a higher-order model, which
 #'   `seminr::predict_pls()` does not predict.
 #' @references
 #' Hair, J. F., Hult, G. T. M., Ringle, C. M., & Sarstedt, M. (2022). *A primer
@@ -457,5 +502,8 @@ aw_q2_predict <- function(x, technique = seminr::predict_DA, noFolds = NULL, rep
   })
   ia_oos <- aw_pls_rep_mean(ia_reps)
   res_pls <- as.matrix(pred$items$PLS_out_of_sample_residuals)
-  stats::setNames(1 - colSums(res_pls^2) / colSums((Xyi - ia_oos)^2), items)
+  if (!is.null(colnames(res_pls)) && all(items %in% colnames(res_pls))) {
+    res_pls <- res_pls[, items, drop = FALSE]
+  }
+  aw_q2_compute(res_pls, Xyi - ia_oos, items)
 }

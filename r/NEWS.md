@@ -1,3 +1,18 @@
+# arwad 0.1.0.9008
+
+* `aw_predict_pls()`, `aw_assess_cvpat()` and `aw_assess_cvpat_compare()` now
+  run the compiled PLS-SEM kernel in a fold-only mode (`wonly = 2L`) that
+  returns weights, loadings, path coefficients and status while skipping total
+  effects and HTMT, which cross-validated prediction does not use. Bootstrap
+  and BCa jackknife runs keep the full kernel mode unchanged, and every
+  cross-validated prediction and CVPAT table remains bit-identical (ADR-0008,
+  amendment of 23 November 2026).
+* `aw_q2_predict()` now skips `NA` prediction rows (such as inadmissible
+  consistent-PLS folds returned by `seminr` 2.6.0) using the same matched
+  complete-case mask on both the PLS numerator and the training-fold IA
+  denominator, and emits a warning naming the omitted cases (ADR-0008,
+  amendment of 23 November 2026).
+
 # arwad 0.1.0.9007
 
 * New `aw_assess_cvpat()` and `aw_assess_cvpat_compare()`: the

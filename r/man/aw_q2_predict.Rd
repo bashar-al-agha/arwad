@@ -30,7 +30,8 @@ is a model.}
 }
 \value{
 A named numeric vector of \eqn{Q^2_{\text{predict}}} values, one per
-predicted endogenous indicator; \code{NULL} for a higher-order model, which
+predicted endogenous indicator (\code{NA_real_} for an indicator if all held-out
+cases are \code{NA}); \code{NULL} for a higher-order model, which
 \code{seminr::predict_pls()} does not predict.
 }
 \description{
@@ -47,7 +48,11 @@ is the indicator's mean in the training fold that held case \eqn{i} out
 When \code{x} is a native prediction object returned by \code{\link[=aw_predict_pls]{aw_predict_pls()}}, its
 pre-computed \code{q2_predict} vector is returned directly. When \code{x} is a model
 returned by \code{seminr::estimate_pls()}, cross-validated predictions are run
-and \eqn{Q^2_{\text{predict}}} is returned.
+and \eqn{Q^2_{\text{predict}}} is returned. If any held-out cases carry \code{NA}
+predictions (for example, an inadmissible consistent-PLS fold under
+\code{seminr} 2.6.0 or later), those cases are omitted from both the numerator
+and the denominator using the same matched complete-case mask and a warning
+names the omitted cases.
 }
 \examples{
 \dontshow{if (requireNamespace("seminr", quietly = TRUE)) withAutoprint(\{ # examplesIf}
