@@ -54,9 +54,9 @@ Compiling needs Goose v2026.3 and the C compiler R uses for packages (Rtools on 
 
 ## Cite
 
-> Al Agha, B. (2026). *Arwad: R, compiled* (Version 0.1.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23725078
+> Al Agha, B. (2026). *Arwad: R, compiled* (Version 0.2.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.24496190
 
-That DOI is version 0.1.0's; [10.5281/zenodo.23725077](https://doi.org/10.5281/zenodo.23725077) always points to the newest release. GitHub's *Cite this repository* button reads the same details from [CITATION.cff](CITATION.cff).
+That DOI is version 0.2.0's (version 0.1.0's is [10.5281/zenodo.23725078](https://doi.org/10.5281/zenodo.23725078)); [10.5281/zenodo.23725077](https://doi.org/10.5281/zenodo.23725077) always points to the newest release. GitHub's *Cite this repository* button reads the same details from [CITATION.cff](CITATION.cff).
 
 ## The idea
 

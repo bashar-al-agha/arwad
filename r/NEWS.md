@@ -1,6 +1,7 @@
 # arwad 0.2.0
 
-Second citable release (24 November 2026), archived on Zenodo.
+Second citable release (24 November 2026), archived on Zenodo:
+<https://doi.org/10.5281/zenodo.24496190>.
 
 * PLS-SEM as the PLS-SEM Primer uses it, beyond the bootstrap of 0.1.0, each
   part bit-identical to seminr or seminrExtras on the models in the test set:
