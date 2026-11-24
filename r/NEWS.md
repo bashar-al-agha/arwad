@@ -1,3 +1,24 @@
+# arwad 0.2.0
+
+Second citable release (24 November 2026), archived on Zenodo.
+
+* PLS-SEM as the PLS-SEM Primer uses it, beyond the bootstrap of 0.1.0, each
+  part bit-identical to seminr or seminrExtras on the models in the test set:
+  consistent PLS for `reflective()` constructs (matched to seminr 2.6.0 and
+  2.5.0), BCa confidence intervals with a compiled jackknife, two-stage
+  interaction terms (moderation), PLSpredict (`aw_predict_pls()`), the
+  cross-validated predictive ability test (`aw_assess_cvpat()`,
+  `aw_assess_cvpat_compare()`) and Q²predict (`aw_q2_predict()`).
+* Measured on one laptop (`bench/phase2/REPORT.md`): 10,000 bootstrap
+  resamples with consistent PLS 8.5 times and with a two-stage interaction
+  term 6.8 times faster than `seminr::bootstrap_model()` on four cores;
+  PLSpredict with 10 folds and 10 repetitions 12.2 times faster than
+  `seminr::predict_pls()`, and CVPAT 8.5 times faster than
+  `seminrExtras::assess_cvpat()`.
+* Licence: the Apache License 2.0 from 0.1.0.9005 on; v0.1.0 remains
+  available under the MIT licence.
+* The development entries below give the details.
+
 # arwad 0.1.0.9008
 
 * `aw_predict_pls()`, `aw_assess_cvpat()` and `aw_assess_cvpat_compare()` now

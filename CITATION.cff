@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it using the metadata from this file."
 type: software
 title: "Arwad: R, compiled"
-abstract: "Arwad is a statistical programming language that keeps R's syntax and package ecosystem and compiles numerical work to native code through the Goose systems language, with deterministic, garbage-collection-free memory and results equivalent to GNU R. Version 0.1.0 is the arwad R package: aw_compile() compiles R functions written in a statistical subset to native code, bit-identical to GNU R across a 201-function corpus on Linux, macOS and Windows; compiled statistical engines bootstrap least-squares and generalised linear models with R's own results and PLS-SEM models with the results of the seminr package; and aw_pls_ci() gives the bias-corrected percentile confidence intervals recommended for PLS-SEM."
+abstract: "Arwad is a statistical programming language that keeps R's syntax and package ecosystem and compiles numerical work to native code through the Goose systems language, with deterministic, garbage-collection-free memory and results equivalent to GNU R. Version 0.2.0 is the arwad R package: aw_compile() compiles R functions written in a statistical subset to native code, bit-identical to GNU R across a 201-function corpus on Linux, macOS and Windows; compiled statistical engines bootstrap least-squares and generalised linear models with R's own results, and PLS-SEM models, with consistent PLS and two-stage interaction terms, with the results of the seminr package; aw_pls_ci() gives the bias-corrected percentile and BCa confidence intervals recommended for PLS-SEM; and aw_predict_pls(), aw_assess_cvpat() and aw_q2_predict() run PLSpredict, the cross-validated predictive ability test (CVPAT) and Q2predict with the results of seminr and seminrExtras."
 authors:
   - family-names: "Al Agha"
     given-names: "Bashar"
@@ -19,8 +19,8 @@ identifiers:
     description: "Version 0.1.0"
 repository-code: "https://github.com/bashar-al-agha/arwad"
 license: Apache-2.0
-version: "0.1.0"
-date-released: "2026-10-28"
+version: "0.2.0"
+date-released: "2026-11-24"
 keywords:
   - statistical-computing
   - r
