@@ -12,6 +12,12 @@
   complete-case mask on both the PLS numerator and the training-fold IA
   denominator, and emits a warning naming the omitted cases (ADR-0008,
   amendment of 23 November 2026).
+* Measured on the PLS-SEM Primer's extended corporate reputation model with
+  10 folds and 10 repetitions (`bench/phase2/REPORT.md`, §3e and §3f, 24
+  November 2026): `aw_predict_pls()` took 0.48 s against 5.87 s for
+  `seminr::predict_pls()` (12.2 times faster; leave-one-out 7.0 times), and
+  `aw_assess_cvpat()` took 1.18 s against 10.02 s for
+  `seminrExtras::assess_cvpat()` (8.5 times faster), with identical results.
 
 # arwad 0.1.0.9007
 
