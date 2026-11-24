@@ -1,0 +1,4 @@
+"part","median_s"
+"cross-validated losses",0.6
+"whole call, 2000 resamples",1.66
+"whole call, 2 resamples",0.56
